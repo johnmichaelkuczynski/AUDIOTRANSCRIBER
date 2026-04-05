@@ -10,6 +10,8 @@ servers:
 tags:
   - name: health
     description: Health operations
+  - name: transcriptions
+    description: Audio transcription operations
 paths:
   /healthz:
     get:
@@ -24,6 +26,110 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+  /transcriptions:
+    get:
+      operationId: listTranscriptions
+      tags: [transcriptions]
+      summary: List all transcriptions
+      description: Returns all transcriptions ordered by creation date
+      responses:
+        "200":
+          description: List of transcriptions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Transcription"
+    post:
+      operationId: createTranscription
+      tags: [transcriptions]
+      summary: Upload and transcribe an audio file
+      description: Accepts an audio file upload and returns the transcription
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: The audio file to transcribe (MP3, WAV, etc.)
+              required:
+                - file
+      responses:
+        "201":
+          description: Transcription created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Transcription"
+        "400":
+          description: Invalid file or request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /transcriptions/{id}:
+    get:
+      operationId: getTranscription
+      tags: [transcriptions]
+      summary: Get a single transcription
+      description: Returns a transcription by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Transcription found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Transcription"
+        "404":
+          description: Transcription not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      operationId: deleteTranscription
+      tags: [transcriptions]
+      summary: Delete a transcription
+      description: Deletes a transcription by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Transcription deleted
+        "404":
+          description: Transcription not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /transcriptions/stats:
+    get:
+      operationId: getTranscriptionStats
+      tags: [transcriptions]
+      summary: Get transcription statistics
+      description: Returns summary statistics about transcriptions
+      responses:
+        "200":
+          description: Transcription stats
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TranscriptionStats"
 components:
   schemas:
     HealthStatus:
@@ -33,4 +139,50 @@ components:
           type: string
       required:
         - status
-
+    Transcription:
+      type: object
+      properties:
+        id:
+          type: integer
+        filename:
+          type: string
+        fileSize:
+          type: integer
+        text:
+          type: string
+        status:
+          type: string
+          enum: [processing, completed, failed]
+        errorMessage:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - filename
+        - fileSize
+        - text
+        - status
+        - errorMessage
+        - createdAt
+    TranscriptionStats:
+      type: object
+      properties:
+        totalCount:
+          type: integer
+        completedCount:
+          type: integer
+        totalFileSize:
+          type: integer
+      required:
+        - totalCount
+        - completedCount
+        - totalFileSize
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+        - error

@@ -5,18 +5,27 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import type {
+  MutationFunction,
   QueryFunction,
   QueryKey,
+  UseMutationOptions,
+  UseMutationResult,
   UseQueryOptions,
   UseQueryResult,
 } from "@tanstack/react-query";
 
-import type { HealthStatus } from "./api.schemas";
+import type {
+  CreateTranscriptionBody,
+  ErrorResponse,
+  HealthStatus,
+  Transcription,
+  TranscriptionStats,
+} from "./api.schemas";
 
 import { customFetch } from "../custom-fetch";
-import type { ErrorType } from "../custom-fetch";
+import type { ErrorType, BodyType } from "../custom-fetch";
 
 type AwaitedInput<T> = PromiseLike<T> | T;
 
@@ -92,6 +101,420 @@ export function useHealthCheck<
   request?: SecondParameter<typeof customFetch>;
 }): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getHealthCheckQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * Returns all transcriptions ordered by creation date
+ * @summary List all transcriptions
+ */
+export const getListTranscriptionsUrl = () => {
+  return `/api/transcriptions`;
+};
+
+export const listTranscriptions = async (
+  options?: RequestInit,
+): Promise<Transcription[]> => {
+  return customFetch<Transcription[]>(getListTranscriptionsUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListTranscriptionsQueryKey = () => {
+  return [`/api/transcriptions`] as const;
+};
+
+export const getListTranscriptionsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listTranscriptions>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listTranscriptions>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListTranscriptionsQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listTranscriptions>>
+  > = ({ signal }) => listTranscriptions({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listTranscriptions>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListTranscriptionsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listTranscriptions>>
+>;
+export type ListTranscriptionsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List all transcriptions
+ */
+
+export function useListTranscriptions<
+  TData = Awaited<ReturnType<typeof listTranscriptions>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listTranscriptions>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListTranscriptionsQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * Accepts an audio file upload and returns the transcription
+ * @summary Upload and transcribe an audio file
+ */
+export const getCreateTranscriptionUrl = () => {
+  return `/api/transcriptions`;
+};
+
+export const createTranscription = async (
+  createTranscriptionBody: CreateTranscriptionBody,
+  options?: RequestInit,
+): Promise<Transcription> => {
+  const formData = new FormData();
+  formData.append(`file`, createTranscriptionBody.file);
+
+  return customFetch<Transcription>(getCreateTranscriptionUrl(), {
+    ...options,
+    method: "POST",
+    body: formData,
+  });
+};
+
+export const getCreateTranscriptionMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createTranscription>>,
+    TError,
+    { data: BodyType<CreateTranscriptionBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createTranscription>>,
+  TError,
+  { data: BodyType<CreateTranscriptionBody> },
+  TContext
+> => {
+  const mutationKey = ["createTranscription"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createTranscription>>,
+    { data: BodyType<CreateTranscriptionBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return createTranscription(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateTranscriptionMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createTranscription>>
+>;
+export type CreateTranscriptionMutationBody = BodyType<CreateTranscriptionBody>;
+export type CreateTranscriptionMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Upload and transcribe an audio file
+ */
+export const useCreateTranscription = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createTranscription>>,
+    TError,
+    { data: BodyType<CreateTranscriptionBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createTranscription>>,
+  TError,
+  { data: BodyType<CreateTranscriptionBody> },
+  TContext
+> => {
+  return useMutation(getCreateTranscriptionMutationOptions(options));
+};
+
+/**
+ * Returns a transcription by ID
+ * @summary Get a single transcription
+ */
+export const getGetTranscriptionUrl = (id: number) => {
+  return `/api/transcriptions/${id}`;
+};
+
+export const getTranscription = async (
+  id: number,
+  options?: RequestInit,
+): Promise<Transcription> => {
+  return customFetch<Transcription>(getGetTranscriptionUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetTranscriptionQueryKey = (id: number) => {
+  return [`/api/transcriptions/${id}`] as const;
+};
+
+export const getGetTranscriptionQueryOptions = <
+  TData = Awaited<ReturnType<typeof getTranscription>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  id: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getTranscription>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetTranscriptionQueryKey(id);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getTranscription>>
+  > = ({ signal }) => getTranscription(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getTranscription>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetTranscriptionQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getTranscription>>
+>;
+export type GetTranscriptionQueryError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Get a single transcription
+ */
+
+export function useGetTranscription<
+  TData = Awaited<ReturnType<typeof getTranscription>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  id: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getTranscription>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetTranscriptionQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * Deletes a transcription by ID
+ * @summary Delete a transcription
+ */
+export const getDeleteTranscriptionUrl = (id: number) => {
+  return `/api/transcriptions/${id}`;
+};
+
+export const deleteTranscription = async (
+  id: number,
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(getDeleteTranscriptionUrl(id), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getDeleteTranscriptionMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteTranscription>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteTranscription>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  const mutationKey = ["deleteTranscription"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteTranscription>>,
+    { id: number }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return deleteTranscription(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeleteTranscriptionMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deleteTranscription>>
+>;
+
+export type DeleteTranscriptionMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Delete a transcription
+ */
+export const useDeleteTranscription = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteTranscription>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deleteTranscription>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  return useMutation(getDeleteTranscriptionMutationOptions(options));
+};
+
+/**
+ * Returns summary statistics about transcriptions
+ * @summary Get transcription statistics
+ */
+export const getGetTranscriptionStatsUrl = () => {
+  return `/api/transcriptions/stats`;
+};
+
+export const getTranscriptionStats = async (
+  options?: RequestInit,
+): Promise<TranscriptionStats> => {
+  return customFetch<TranscriptionStats>(getGetTranscriptionStatsUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetTranscriptionStatsQueryKey = () => {
+  return [`/api/transcriptions/stats`] as const;
+};
+
+export const getGetTranscriptionStatsQueryOptions = <
+  TData = Awaited<ReturnType<typeof getTranscriptionStats>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getTranscriptionStats>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetTranscriptionStatsQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getTranscriptionStats>>
+  > = ({ signal }) => getTranscriptionStats({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getTranscriptionStats>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetTranscriptionStatsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getTranscriptionStats>>
+>;
+export type GetTranscriptionStatsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get transcription statistics
+ */
+
+export function useGetTranscriptionStats<
+  TData = Awaited<ReturnType<typeof getTranscriptionStats>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getTranscriptionStats>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetTranscriptionStatsQueryOptions(options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;

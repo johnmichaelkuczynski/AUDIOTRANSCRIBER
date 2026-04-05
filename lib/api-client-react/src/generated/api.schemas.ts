@@ -8,3 +8,38 @@
 export interface HealthStatus {
   status: string;
 }
+
+export type TranscriptionStatus =
+  (typeof TranscriptionStatus)[keyof typeof TranscriptionStatus];
+
+export const TranscriptionStatus = {
+  processing: "processing",
+  completed: "completed",
+  failed: "failed",
+} as const;
+
+export interface Transcription {
+  id: number;
+  filename: string;
+  fileSize: number;
+  text: string;
+  status: TranscriptionStatus;
+  /** @nullable */
+  errorMessage: string | null;
+  createdAt: string;
+}
+
+export interface TranscriptionStats {
+  totalCount: number;
+  completedCount: number;
+  totalFileSize: number;
+}
+
+export interface ErrorResponse {
+  error: string;
+}
+
+export type CreateTranscriptionBody = {
+  /** The audio file to transcribe (MP3, WAV, etc.) */
+  file: Blob;
+};

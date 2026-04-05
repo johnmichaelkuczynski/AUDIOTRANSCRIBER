@@ -14,3 +14,66 @@ import * as zod from "zod";
 export const HealthCheckResponse = zod.object({
   status: zod.string(),
 });
+
+/**
+ * Returns all transcriptions ordered by creation date
+ * @summary List all transcriptions
+ */
+export const ListTranscriptionsResponseItem = zod.object({
+  id: zod.number(),
+  filename: zod.string(),
+  fileSize: zod.number(),
+  text: zod.string(),
+  status: zod.enum(["processing", "completed", "failed"]),
+  errorMessage: zod.string().nullable(),
+  createdAt: zod.coerce.date(),
+});
+export const ListTranscriptionsResponse = zod.array(
+  ListTranscriptionsResponseItem,
+);
+
+/**
+ * Accepts an audio file upload and returns the transcription
+ * @summary Upload and transcribe an audio file
+ */
+export const CreateTranscriptionBody = zod.object({
+  file: zod
+    .instanceof(File)
+    .describe("The audio file to transcribe (MP3, WAV, etc.)"),
+});
+
+/**
+ * Returns a transcription by ID
+ * @summary Get a single transcription
+ */
+export const GetTranscriptionParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const GetTranscriptionResponse = zod.object({
+  id: zod.number(),
+  filename: zod.string(),
+  fileSize: zod.number(),
+  text: zod.string(),
+  status: zod.enum(["processing", "completed", "failed"]),
+  errorMessage: zod.string().nullable(),
+  createdAt: zod.coerce.date(),
+});
+
+/**
+ * Deletes a transcription by ID
+ * @summary Delete a transcription
+ */
+export const DeleteTranscriptionParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+/**
+ * Returns summary statistics about transcriptions
+ * @summary Get transcription statistics
+ */
+export const GetTranscriptionStatsResponse = zod.object({
+  totalCount: zod.number(),
+  completedCount: zod.number(),
+  totalFileSize: zod.number(),
+});

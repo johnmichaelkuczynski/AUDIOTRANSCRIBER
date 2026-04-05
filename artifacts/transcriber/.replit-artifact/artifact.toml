@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/"
+title = "MP3 Transcriber"
+version = "1.0.0"
+id = "artifacts/transcriber"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 19048
+
+[services.development]
+run = "pnpm --filter @workspace/transcriber run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/transcriber", "run", "build" ]
+publicDir = "artifacts/transcriber/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "19048"
+BASE_PATH = "/"
