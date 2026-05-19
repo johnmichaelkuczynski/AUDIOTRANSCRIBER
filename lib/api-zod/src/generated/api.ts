@@ -69,6 +69,37 @@ export const DeleteTranscriptionParams = zod.object({
 });
 
 /**
+ * Runs the completed transcription text through a chosen LLM provider.
+Modes:
+  - `cleanup`: removes filler words ("um", "uh"), false starts and
+    repetitions, lightly fixes grammar while preserving meaning.
+  - `rewrite`: rewrites the transcript according to the user's
+    free-form instructions.
+
+ * @summary Clean up or rewrite a transcription with an LLM
+ */
+export const TransformTranscriptionParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const TransformTranscriptionBody = zod.object({
+  mode: zod.enum(["cleanup", "rewrite"]),
+  provider: zod.enum(["deepseek", "anthropic", "venice"]),
+  instructions: zod
+    .string()
+    .optional()
+    .describe(
+      'Required when mode is \"rewrite\". Free-form rewrite directions.',
+    ),
+});
+
+export const TransformTranscriptionResponse = zod.object({
+  text: zod.string(),
+  mode: zod.enum(["cleanup", "rewrite"]),
+  provider: zod.enum(["deepseek", "anthropic", "venice"]),
+});
+
+/**
  * Returns summary statistics about transcriptions
  * @summary Get transcription statistics
  */

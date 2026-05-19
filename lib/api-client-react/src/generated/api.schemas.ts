@@ -35,6 +35,53 @@ export interface TranscriptionStats {
   totalFileSize: number;
 }
 
+export type TransformRequestMode =
+  (typeof TransformRequestMode)[keyof typeof TransformRequestMode];
+
+export const TransformRequestMode = {
+  cleanup: "cleanup",
+  rewrite: "rewrite",
+} as const;
+
+export type TransformRequestProvider =
+  (typeof TransformRequestProvider)[keyof typeof TransformRequestProvider];
+
+export const TransformRequestProvider = {
+  deepseek: "deepseek",
+  anthropic: "anthropic",
+  venice: "venice",
+} as const;
+
+export interface TransformRequest {
+  mode: TransformRequestMode;
+  provider: TransformRequestProvider;
+  /** Required when mode is "rewrite". Free-form rewrite directions. */
+  instructions?: string;
+}
+
+export type TransformResponseMode =
+  (typeof TransformResponseMode)[keyof typeof TransformResponseMode];
+
+export const TransformResponseMode = {
+  cleanup: "cleanup",
+  rewrite: "rewrite",
+} as const;
+
+export type TransformResponseProvider =
+  (typeof TransformResponseProvider)[keyof typeof TransformResponseProvider];
+
+export const TransformResponseProvider = {
+  deepseek: "deepseek",
+  anthropic: "anthropic",
+  venice: "venice",
+} as const;
+
+export interface TransformResponse {
+  text: string;
+  mode: TransformResponseMode;
+  provider: TransformResponseProvider;
+}
+
 export interface ErrorResponse {
   error: string;
 }

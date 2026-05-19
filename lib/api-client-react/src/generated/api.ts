@@ -22,6 +22,8 @@ import type {
   HealthStatus,
   Transcription,
   TranscriptionStats,
+  TransformRequest,
+  TransformResponse,
 } from "./api.schemas";
 
 import { customFetch } from "../custom-fetch";
@@ -445,6 +447,100 @@ export const useDeleteTranscription = <
   TContext
 > => {
   return useMutation(getDeleteTranscriptionMutationOptions(options));
+};
+
+/**
+ * Runs the completed transcription text through a chosen LLM provider.
+Modes:
+  - `cleanup`: removes filler words ("um", "uh"), false starts and
+    repetitions, lightly fixes grammar while preserving meaning.
+  - `rewrite`: rewrites the transcript according to the user's
+    free-form instructions.
+
+ * @summary Clean up or rewrite a transcription with an LLM
+ */
+export const getTransformTranscriptionUrl = (id: number) => {
+  return `/api/transcriptions/${id}/transform`;
+};
+
+export const transformTranscription = async (
+  id: number,
+  transformRequest: TransformRequest,
+  options?: RequestInit,
+): Promise<TransformResponse> => {
+  return customFetch<TransformResponse>(getTransformTranscriptionUrl(id), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(transformRequest),
+  });
+};
+
+export const getTransformTranscriptionMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof transformTranscription>>,
+    TError,
+    { id: number; data: BodyType<TransformRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof transformTranscription>>,
+  TError,
+  { id: number; data: BodyType<TransformRequest> },
+  TContext
+> => {
+  const mutationKey = ["transformTranscription"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof transformTranscription>>,
+    { id: number; data: BodyType<TransformRequest> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return transformTranscription(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type TransformTranscriptionMutationResult = NonNullable<
+  Awaited<ReturnType<typeof transformTranscription>>
+>;
+export type TransformTranscriptionMutationBody = BodyType<TransformRequest>;
+export type TransformTranscriptionMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Clean up or rewrite a transcription with an LLM
+ */
+export const useTransformTranscription = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof transformTranscription>>,
+    TError,
+    { id: number; data: BodyType<TransformRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof transformTranscription>>,
+  TError,
+  { id: number; data: BodyType<TransformRequest> },
+  TContext
+> => {
+  return useMutation(getTransformTranscriptionMutationOptions(options));
 };
 
 /**

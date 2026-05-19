@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Loader2, Copy, Trash2, FileAudio, AlertCircle, Check } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { TransformPanel } from "./TransformPanel";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -124,6 +125,7 @@ export function TranscriptionCard({ transcription }: TranscriptionCardProps) {
             <p className="text-sm text-foreground/90 whitespace-pre-wrap leading-relaxed font-mono bg-muted/30 p-4 rounded-lg border border-border/40 max-h-[300px] overflow-y-auto">
               {transcription.text}
             </p>
+            <TransformPanel transcriptionId={transcription.id} />
           </div>
         )}
       </CardContent>

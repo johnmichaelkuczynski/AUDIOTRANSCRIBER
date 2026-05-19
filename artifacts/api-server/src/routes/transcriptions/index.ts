@@ -9,8 +9,12 @@ import {
   ListTranscriptionsResponseItem,
   DeleteTranscriptionParams,
   GetTranscriptionStatsResponse,
+  TransformTranscriptionParams,
+  TransformTranscriptionBody,
+  TransformTranscriptionResponse,
 } from "@workspace/api-zod";
 import { logger } from "../../lib/logger";
+import { transformTranscript } from "../../lib/llm";
 
 const router: IRouter = Router();
 
@@ -64,6 +68,57 @@ router.post("/transcriptions", upload.single("file"), async (req, res): Promise<
       .update(transcriptionsTable)
       .set({ status: "failed", errorMessage })
       .where(eq(transcriptionsTable.id, record.id));
+  }
+});
+
+router.post("/transcriptions/:id/transform", async (req, res): Promise<void> => {
+  const params = TransformTranscriptionParams.safeParse(req.params);
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+  const body = TransformTranscriptionBody.safeParse(req.body);
+  if (!body.success) {
+    res.status(400).json({ error: body.error.message });
+    return;
+  }
+  if (body.data.mode === "rewrite" && !body.data.instructions?.trim()) {
+    res.status(400).json({ error: "instructions are required for rewrite mode" });
+    return;
+  }
+
+  const [transcription] = await db
+    .select()
+    .from(transcriptionsTable)
+    .where(eq(transcriptionsTable.id, params.data.id));
+
+  if (!transcription) {
+    res.status(404).json({ error: "Transcription not found" });
+    return;
+  }
+  if (transcription.status !== "completed" || !transcription.text) {
+    res.status(400).json({ error: "Transcription is not completed yet" });
+    return;
+  }
+
+  try {
+    const text = await transformTranscript({
+      provider: body.data.provider,
+      mode: body.data.mode,
+      transcript: transcription.text,
+      instructions: body.data.instructions,
+    });
+    res.json(
+      TransformTranscriptionResponse.parse({
+        text,
+        mode: body.data.mode,
+        provider: body.data.provider,
+      }),
+    );
+  } catch (err) {
+    logger.error({ err, id: params.data.id, provider: body.data.provider }, "Transform failed");
+    const message = err instanceof Error ? err.message : "Transform failed";
+    res.status(500).json({ error: message });
   }
 });
 

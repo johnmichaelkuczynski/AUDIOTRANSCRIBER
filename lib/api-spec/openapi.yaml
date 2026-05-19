@@ -117,6 +117,49 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+  /transcriptions/{id}/transform:
+    post:
+      operationId: transformTranscription
+      tags: [transcriptions]
+      summary: Clean up or rewrite a transcription with an LLM
+      description: |
+        Runs the completed transcription text through a chosen LLM provider.
+        Modes:
+          - `cleanup`: removes filler words ("um", "uh"), false starts and
+            repetitions, lightly fixes grammar while preserving meaning.
+          - `rewrite`: rewrites the transcript according to the user's
+            free-form instructions.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TransformRequest"
+      responses:
+        "200":
+          description: Transformed text
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TransformResponse"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Transcription not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
   /transcriptions/stats:
     get:
       operationId: getTranscriptionStats
@@ -179,6 +222,36 @@ components:
         - totalCount
         - completedCount
         - totalFileSize
+    TransformRequest:
+      type: object
+      properties:
+        mode:
+          type: string
+          enum: [cleanup, rewrite]
+        provider:
+          type: string
+          enum: [deepseek, anthropic, venice]
+        instructions:
+          type: string
+          description: Required when mode is "rewrite". Free-form rewrite directions.
+      required:
+        - mode
+        - provider
+    TransformResponse:
+      type: object
+      properties:
+        text:
+          type: string
+        mode:
+          type: string
+          enum: [cleanup, rewrite]
+        provider:
+          type: string
+          enum: [deepseek, anthropic, venice]
+      required:
+        - text
+        - mode
+        - provider
     ErrorResponse:
       type: object
       properties:
