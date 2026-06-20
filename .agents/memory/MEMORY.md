@@ -1,0 +1,1 @@
+- [MediaRecorder recording reliability](mediarecorder-finalization.md) — in-iframe audio recording: reset disposed-guard refs on mount; don't trust `onstop` alone, use timeslice + idempotent finalize + fallback timer.

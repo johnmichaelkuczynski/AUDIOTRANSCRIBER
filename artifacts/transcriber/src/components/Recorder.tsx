@@ -60,6 +60,8 @@ export function Recorder() {
   const autoTranscribeRef = useRef(autoTranscribe);
   const audioUrlRef = useRef<string | null>(null);
   const disposedRef = useRef(false);
+  const finalizedRef = useRef(false);
+  const fallbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     autoTranscribeRef.current = autoTranscribe;
@@ -114,9 +116,14 @@ export function Recorder() {
   }, [setAudioUrlTracked]);
 
   useEffect(() => {
+    disposedRef.current = false;
     return () => {
       disposedRef.current = true;
       stopTimer();
+      if (fallbackTimerRef.current) {
+        clearTimeout(fallbackTimerRef.current);
+        fallbackTimerRef.current = null;
+      }
       const recorder = mediaRecorderRef.current;
       if (recorder) {
         recorder.ondataavailable = null;
@@ -148,6 +155,46 @@ export function Recorder() {
     [createTranscription],
   );
 
+  const finalizeRecording = useCallback(() => {
+    if (finalizedRef.current) return;
+    finalizedRef.current = true;
+
+    if (fallbackTimerRef.current) {
+      clearTimeout(fallbackTimerRef.current);
+      fallbackTimerRef.current = null;
+    }
+    stopTimer();
+    releaseStream();
+
+    if (disposedRef.current) return;
+
+    const blob = new Blob(chunksRef.current, {
+      type: mimeRef.current || "audio/webm",
+    });
+    recordedBlobRef.current = blob;
+
+    if (blob.size === 0) {
+      setState("idle");
+      setElapsed(0);
+      toast({
+        title: "No audio captured",
+        description:
+          "The recording came back empty. Please check your microphone and try again.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (autoTranscribeRef.current) {
+      setState("idle");
+      setElapsed(0);
+      transcribeBlob(blob);
+    } else {
+      setAudioUrlTracked(URL.createObjectURL(blob));
+      setState("recorded");
+    }
+  }, [stopTimer, releaseStream, transcribeBlob, setAudioUrlTracked, toast]);
+
   const startRecording = useCallback(async () => {
     if (!navigator.mediaDevices?.getUserMedia) {
       toast({
@@ -167,30 +214,23 @@ export function Recorder() {
       const recorder = mime ? new MediaRecorder(stream, { mimeType: mime }) : new MediaRecorder(stream);
       mediaRecorderRef.current = recorder;
       chunksRef.current = [];
+      finalizedRef.current = false;
 
       recorder.ondataavailable = (e) => {
         if (e.data.size > 0) chunksRef.current.push(e.data);
       };
 
       recorder.onstop = () => {
-        stopTimer();
-        releaseStream();
-        if (disposedRef.current) return;
-        const blob = new Blob(chunksRef.current, {
-          type: mimeRef.current || "audio/webm",
-        });
-        recordedBlobRef.current = blob;
-
-        if (autoTranscribeRef.current) {
-          resetRecording();
-          transcribeBlob(blob);
-        } else {
-          setAudioUrlTracked(URL.createObjectURL(blob));
-          setState("recorded");
-        }
+        finalizeRecording();
       };
 
-      recorder.start();
+      recorder.onerror = () => {
+        finalizeRecording();
+      };
+
+      // Collect data in 1s chunks so audio accumulates during the recording
+      // (and survives even if the final `onstop` event is unreliable).
+      recorder.start(1000);
       setState("recording");
       setElapsed(0);
       timerRef.current = setInterval(() => setElapsed((e) => e + 1), 1000);
@@ -205,14 +245,30 @@ export function Recorder() {
         variant: "destructive",
       });
     }
-  }, [toast, stopTimer, releaseStream, resetRecording, transcribeBlob]);
+  }, [toast, finalizeRecording]);
 
   const stopRecording = useCallback(() => {
+    stopTimer();
     const recorder = mediaRecorderRef.current;
     if (recorder && recorder.state !== "inactive") {
-      recorder.stop();
+      try {
+        recorder.requestData();
+      } catch {
+        // not supported in all browsers; ignore
+      }
+      try {
+        recorder.stop();
+      } catch {
+        // ignore
+      }
     }
-  }, []);
+    // Fallback: if `onstop` never fires (some browsers/iframes are flaky),
+    // finalize from the chunks we already collected via the 1s timeslice.
+    if (fallbackTimerRef.current) clearTimeout(fallbackTimerRef.current);
+    fallbackTimerRef.current = setTimeout(() => {
+      finalizeRecording();
+    }, 700);
+  }, [stopTimer, finalizeRecording]);
 
   const handleDownload = useCallback(() => {
     const blob = recordedBlobRef.current;
