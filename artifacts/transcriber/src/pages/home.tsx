@@ -1,4 +1,5 @@
 import { UploadArea } from "@/components/UploadArea";
+import { Recorder } from "@/components/Recorder";
 import { TranscriptionList } from "@/components/TranscriptionList";
 import { StatsSummary } from "@/components/StatsSummary";
 import { Waves } from "lucide-react";
@@ -27,9 +28,15 @@ export default function Home() {
           <section className="space-y-4">
             <div className="space-y-1">
               <h2 className="text-2xl font-bold tracking-tight text-foreground">New Transcription</h2>
-              <p className="text-muted-foreground">Upload high-quality audio for the best results.</p>
+              <p className="text-muted-foreground">Upload a file or record audio for the best results.</p>
             </div>
             <UploadArea />
+            <div className="flex items-center gap-4">
+              <div className="h-px flex-1 bg-border" />
+              <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">or</span>
+              <div className="h-px flex-1 bg-border" />
+            </div>
+            <Recorder />
           </section>
 
           <section className="space-y-6">
