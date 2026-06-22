@@ -6,7 +6,7 @@ import { formatFileSize, formatDate } from "@/lib/format";
 import { Card, CardHeader, CardContent, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Copy, Trash2, FileAudio, AlertCircle, Check } from "lucide-react";
+import { Loader2, Copy, Trash2, FileAudio, AlertCircle, Check, Volume2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { TransformPanel } from "./TransformPanel";
@@ -120,6 +120,23 @@ export function TranscriptionCard({ transcription }: TranscriptionCardProps) {
           </div>
         )}
         
+        {isCompleted && transcription.audioPath && (
+          <div className="mb-3">
+            <div className="flex items-center gap-2 mb-1.5 text-xs font-medium text-muted-foreground">
+              <Volume2 className="w-3.5 h-3.5" />
+              <span>Recording playback</span>
+            </div>
+            <audio
+              controls
+              preload="none"
+              className="w-full h-10"
+              src={`/api/transcriptions/${transcription.id}/audio`}
+            >
+              Your browser does not support audio playback.
+            </audio>
+          </div>
+        )}
+
         {isCompleted && transcription.text && (
           <div className="relative">
             <p className="text-sm text-foreground/90 whitespace-pre-wrap leading-relaxed font-mono bg-muted/30 p-4 rounded-lg border border-border/40 max-h-[300px] overflow-y-auto">

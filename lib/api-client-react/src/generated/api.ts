@@ -450,6 +450,98 @@ export const useDeleteTranscription = <
 };
 
 /**
+ * Streams the original uploaded/recorded audio that was persisted for
+this transcription. Supports HTTP Range requests for seeking.
+Returns 404 when no audio was stored for the transcription.
+
+ * @summary Stream the original audio for a transcription
+ */
+export const getGetTranscriptionAudioUrl = (id: number) => {
+  return `/api/transcriptions/${id}/audio`;
+};
+
+export const getTranscriptionAudio = async (
+  id: number,
+  options?: RequestInit,
+): Promise<Blob> => {
+  return customFetch<Blob>(getGetTranscriptionAudioUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetTranscriptionAudioQueryKey = (id: number) => {
+  return [`/api/transcriptions/${id}/audio`] as const;
+};
+
+export const getGetTranscriptionAudioQueryOptions = <
+  TData = Awaited<ReturnType<typeof getTranscriptionAudio>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  id: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getTranscriptionAudio>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetTranscriptionAudioQueryKey(id);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getTranscriptionAudio>>
+  > = ({ signal }) => getTranscriptionAudio(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getTranscriptionAudio>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetTranscriptionAudioQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getTranscriptionAudio>>
+>;
+export type GetTranscriptionAudioQueryError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Stream the original audio for a transcription
+ */
+
+export function useGetTranscriptionAudio<
+  TData = Awaited<ReturnType<typeof getTranscriptionAudio>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  id: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getTranscriptionAudio>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetTranscriptionAudioQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
  * Runs the completed transcription text through a chosen LLM provider.
 Modes:
   - `cleanup`: removes filler words ("um", "uh"), false starts and

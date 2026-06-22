@@ -1,1 +1,1 @@
-- [MediaRecorder recording reliability](mediarecorder-finalization.md) — in-iframe audio recording: reset disposed-guard refs on mount; don't trust `onstop` alone, use timeslice + idempotent finalize + fallback timer.
+- [Audio playback via object storage](audio-playback-storage.md) — persist upload audio server-side for replay; object-storage template gotchas + HTTP Range serving.

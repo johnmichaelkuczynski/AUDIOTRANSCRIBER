@@ -9,6 +9,7 @@ export const transcriptionsTable = pgTable("transcriptions", {
   text: text("text").notNull().default(""),
   status: text("status").notNull().default("processing"),
   errorMessage: text("error_message"),
+  audioPath: text("audio_path"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

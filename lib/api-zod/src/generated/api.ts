@@ -26,6 +26,12 @@ export const ListTranscriptionsResponseItem = zod.object({
   text: zod.string(),
   status: zod.enum(["processing", "completed", "failed"]),
   errorMessage: zod.string().nullable(),
+  audioPath: zod
+    .string()
+    .nullable()
+    .describe(
+      "Path to the stored original audio, if persisted. Null when no audio is available for playback.",
+    ),
   createdAt: zod.coerce.date(),
 });
 export const ListTranscriptionsResponse = zod.array(
@@ -57,6 +63,12 @@ export const GetTranscriptionResponse = zod.object({
   text: zod.string(),
   status: zod.enum(["processing", "completed", "failed"]),
   errorMessage: zod.string().nullable(),
+  audioPath: zod
+    .string()
+    .nullable()
+    .describe(
+      "Path to the stored original audio, if persisted. Null when no audio is available for playback.",
+    ),
   createdAt: zod.coerce.date(),
 });
 
@@ -65,6 +77,17 @@ export const GetTranscriptionResponse = zod.object({
  * @summary Delete a transcription
  */
 export const DeleteTranscriptionParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+/**
+ * Streams the original uploaded/recorded audio that was persisted for
+this transcription. Supports HTTP Range requests for seeking.
+Returns 404 when no audio was stored for the transcription.
+
+ * @summary Stream the original audio for a transcription
+ */
+export const GetTranscriptionAudioParams = zod.object({
   id: zod.coerce.number(),
 });
 

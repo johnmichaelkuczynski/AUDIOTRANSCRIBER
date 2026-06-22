@@ -15,5 +15,10 @@ export interface Transcription {
   status: TranscriptionStatus;
   /** @nullable */
   errorMessage: string | null;
+  /**
+   * Path to the stored original audio, if persisted. Null when no audio is available for playback.
+   * @nullable
+   */
+  audioPath: string | null;
   createdAt: Date;
 }
