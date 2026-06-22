@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { Transcription } from "@workspace/api-client-react/src/generated/api.schemas";
 import { useDeleteTranscription, getListTranscriptionsQueryKey, getGetTranscriptionStatsQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -6,7 +6,7 @@ import { formatFileSize, formatDate } from "@/lib/format";
 import { Card, CardHeader, CardContent, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Copy, Trash2, FileAudio, AlertCircle, Check, Volume2 } from "lucide-react";
+import { Loader2, Copy, Trash2, FileAudio, AlertCircle, Check, Play, Pause } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { TransformPanel } from "./TransformPanel";
@@ -28,8 +28,20 @@ interface TranscriptionCardProps {
 
 export function TranscriptionCard({ transcription }: TranscriptionCardProps) {
   const [copied, setCopied] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
+
+  const togglePlayback = () => {
+    const el = audioRef.current;
+    if (!el) return;
+    if (el.paused) {
+      el.play();
+    } else {
+      el.pause();
+    }
+  };
 
   const deleteMutation = useDeleteTranscription({
     mutation: {
@@ -122,18 +134,26 @@ export function TranscriptionCard({ transcription }: TranscriptionCardProps) {
         
         {isCompleted && transcription.audioPath && (
           <div className="mb-3">
-            <div className="flex items-center gap-2 mb-1.5 text-xs font-medium text-muted-foreground">
-              <Volume2 className="w-3.5 h-3.5" />
-              <span>Recording playback</span>
-            </div>
             <audio
-              controls
+              ref={audioRef}
               preload="none"
-              className="w-full h-10"
               src={`/api/transcriptions/${transcription.id}/audio`}
+              onPlay={() => setIsPlaying(true)}
+              onPause={() => setIsPlaying(false)}
+              onEnded={() => setIsPlaying(false)}
+              className="hidden"
+            />
+            <Button
+              onClick={togglePlayback}
+              className="w-full h-14 text-base font-bold uppercase tracking-wide bg-red-600 hover:bg-red-700 text-white gap-2 shadow-md"
             >
-              Your browser does not support audio playback.
-            </audio>
+              {isPlaying ? (
+                <Pause className="w-6 h-6 fill-current" />
+              ) : (
+                <Play className="w-6 h-6 fill-current" />
+              )}
+              {isPlaying ? "Pause Recording" : "Play This Recording"}
+            </Button>
           </div>
         )}
 
