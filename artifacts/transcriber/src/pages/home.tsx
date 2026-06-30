@@ -17,8 +17,16 @@ export default function Home() {
               Transcriber
             </h1>
           </div>
-          <div className="text-sm font-medium text-muted-foreground">
-            Studio Workstation
+          <div className="flex items-center gap-4">
+            <span className="hidden sm:inline text-sm font-medium text-muted-foreground">
+              Studio Workstation
+            </span>
+            <a
+              href="mailto:zhi@zhisystems.org"
+              className="text-sm font-medium text-primary hover:text-primary/80 transition-colors"
+            >
+              Contact Us
+            </a>
           </div>
         </div>
       </header>
@@ -49,6 +57,21 @@ export default function Home() {
           </section>
         </div>
       </main>
+
+      <footer className="border-t border-border mt-8">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6 flex flex-col sm:flex-row items-center justify-between gap-2 text-sm text-muted-foreground">
+          <span>© {new Date().getFullYear()} Transcriber</span>
+          <span>
+            Questions?{" "}
+            <a
+              href="mailto:zhi@zhisystems.org"
+              className="font-medium text-primary hover:text-primary/80 transition-colors"
+            >
+              zhi@zhisystems.org
+            </a>
+          </span>
+        </div>
+      </footer>
     </div>
   );
 }
