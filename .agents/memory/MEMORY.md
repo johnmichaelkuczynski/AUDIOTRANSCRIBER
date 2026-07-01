@@ -1,1 +1,2 @@
 - [Audio playback via object storage](audio-playback-storage.md) — persist upload audio server-side for replay; object-storage template gotchas + HTTP Range serving.
+- [Deploy crash-loop diagnosis](deploy-crashloop-diagnosis.md) — healthcheck 500 + "port never opened detected=0" = app throws at startup (usually missing AI integration env), not a build/.cjs path mismatch.
