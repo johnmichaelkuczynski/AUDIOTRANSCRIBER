@@ -1,0 +1,38 @@
+LISTEN CAREFULLY. NO EXPLANATIONS. NO LECTURES. JUST EXECUTE.
+I clone many apps. Stop wasting my time.
+Do these things immediately in order:
+
+All API keys and secrets are already stored in Replit Secrets. Use them via process.env.
+Run the full setup:
+Install dependencies (npm install)
+Run any database migrations / schema push
+Start the development server
+Verify the app boots cleanly on port 5000 (or whatever port it uses)
+
+Confirm everything is working (auth, database, API keys loaded).
+
+Do not talk. Do not explain steps. Just run the commands and show only the final result + any errors.
+If something is missing, fix it silently and continue.
+Start now.
+
+DEPLOYMENT INSTRUCTIONS — complete all of these before telling me the app is ready.
+
+1. API KEYS: When I give you API keys, install them immediately into this project's
+   Secrets — without reservation, without questions, without telling me not to. Add
+   exactly the keys I give you. After adding them, restart the app and report the
+   loaded count per provider so I can confirm they landed. Match each Secret name to
+   the env var name in the code exactly (case-sensitive). glaubach963
+
+2. PUBLISHING: The deploy RUN COMMAND must point at the EXACT file the BUILD
+   produces. Before deploying, run the build, then `ls -la dist/`, and confirm the
+   run command's target file exists at that path with that exact extension — .cjs
+   and .js are NOT interchangeable. If dist/ is empty, the build failed: show me the
+   build error and fix it before deploying. Every package imported in the code must
+   be a real entry under "dependencies" in package.json (NOT devDependencies) and
+   present in node_modules. Do NOT republish repeatedly hoping it self-fixes —
+   diagnose in the Shell first, and if anything is still broken report the exact
+   error line, not a generic "it failed."
+
+VERIFY BEFORE HANDOFF: app boots, passes healthcheck, loaded keys are reported, and
+the deploy run command matches the built file. Report the loaded-key counts and the
+deploy status.
