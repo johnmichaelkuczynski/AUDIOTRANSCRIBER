@@ -1,2 +1,3 @@
 - [Audio playback via object storage](audio-playback-storage.md) — persist upload audio server-side for replay; object-storage template gotchas + HTTP Range serving.
+- [Auth requires per-user data scoping](auth-user-scoping.md) — gating routes behind requireAuth isn't enough; add userId column + WHERE-scope every query or you ship an IDOR.
 - [Deploy crash-loop diagnosis](deploy-crashloop-diagnosis.md) — healthcheck 500 + "port never opened detected=0" = app throws at startup (usually missing AI integration env), not a build/.cjs path mismatch.

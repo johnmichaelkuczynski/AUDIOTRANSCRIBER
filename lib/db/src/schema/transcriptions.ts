@@ -4,6 +4,7 @@ import { z } from "zod/v4";
 
 export const transcriptionsTable = pgTable("transcriptions", {
   id: serial("id").primaryKey(),
+  userId: text("user_id"),
   filename: text("filename").notNull(),
   fileSize: integer("file_size").notNull(),
   text: text("text").notNull().default(""),
