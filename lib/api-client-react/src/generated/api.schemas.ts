@@ -5,6 +5,41 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+export interface AuthUser {
+  id: number;
+  email: string;
+  /** @nullable */
+  name: string | null;
+  /** @nullable */
+  picture: string | null;
+}
+
+export interface LoginAnalyticsPoint {
+  label: string;
+  count: number;
+}
+
+export interface LoginAnalyticsTotals {
+  day: number;
+  week: number;
+  month: number;
+  year: number;
+  allTime: number;
+}
+
+export interface LoginAnalyticsSeries {
+  day: LoginAnalyticsPoint[];
+  week: LoginAnalyticsPoint[];
+  month: LoginAnalyticsPoint[];
+  year: LoginAnalyticsPoint[];
+  allTime: LoginAnalyticsPoint[];
+}
+
+export interface LoginAnalytics {
+  totals: LoginAnalyticsTotals;
+  series: LoginAnalyticsSeries;
+}
+
 export interface HealthStatus {
   status: string;
 }

@@ -209,8 +209,137 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/TranscriptionStats"
+  /auth/me:
+    get:
+      operationId: getCurrentUser
+      tags: [auth]
+      summary: Get the current signed-in user
+      responses:
+        "200":
+          description: Current user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthUser"
+        "401":
+          description: Not signed in
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /auth/logout:
+    post:
+      operationId: logout
+      tags: [auth]
+      summary: Sign out the current user
+      responses:
+        "204":
+          description: Signed out
+  /analytics/logins:
+    get:
+      operationId: getLoginAnalytics
+      tags: [analytics]
+      summary: Login analytics
+      description: Google login counts for last day, week, month, year, and all time with chart series
+      responses:
+        "200":
+          description: Login analytics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoginAnalytics"
+        "401":
+          description: Not signed in
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 components:
   schemas:
+    AuthUser:
+      type: object
+      properties:
+        id:
+          type: integer
+        email:
+          type: string
+        name:
+          type: ["string", "null"]
+        picture:
+          type: ["string", "null"]
+      required:
+        - id
+        - email
+        - name
+        - picture
+    LoginAnalyticsPoint:
+      type: object
+      properties:
+        label:
+          type: string
+        count:
+          type: integer
+      required:
+        - label
+        - count
+    LoginAnalyticsTotals:
+      type: object
+      properties:
+        day:
+          type: integer
+        week:
+          type: integer
+        month:
+          type: integer
+        year:
+          type: integer
+        allTime:
+          type: integer
+      required:
+        - day
+        - week
+        - month
+        - year
+        - allTime
+    LoginAnalyticsSeries:
+      type: object
+      properties:
+        day:
+          type: array
+          items:
+            $ref: "#/components/schemas/LoginAnalyticsPoint"
+        week:
+          type: array
+          items:
+            $ref: "#/components/schemas/LoginAnalyticsPoint"
+        month:
+          type: array
+          items:
+            $ref: "#/components/schemas/LoginAnalyticsPoint"
+        year:
+          type: array
+          items:
+            $ref: "#/components/schemas/LoginAnalyticsPoint"
+        allTime:
+          type: array
+          items:
+            $ref: "#/components/schemas/LoginAnalyticsPoint"
+      required:
+        - day
+        - week
+        - month
+        - year
+        - allTime
+    LoginAnalytics:
+      type: object
+      properties:
+        totals:
+          $ref: "#/components/schemas/LoginAnalyticsTotals"
+        series:
+          $ref: "#/components/schemas/LoginAnalyticsSeries"
+      required:
+        - totals
+        - series
     HealthStatus:
       type: object
       properties:

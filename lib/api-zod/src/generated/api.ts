@@ -131,3 +131,59 @@ export const GetTranscriptionStatsResponse = zod.object({
   completedCount: zod.number(),
   totalFileSize: zod.number(),
 });
+
+/**
+ * @summary Get the current signed-in user
+ */
+export const GetCurrentUserResponse = zod.object({
+  id: zod.number(),
+  email: zod.string(),
+  name: zod.string().nullable(),
+  picture: zod.string().nullable(),
+});
+
+/**
+ * Google login counts for last day, week, month, year, and all time with chart series
+ * @summary Login analytics
+ */
+export const GetLoginAnalyticsResponse = zod.object({
+  totals: zod.object({
+    day: zod.number(),
+    week: zod.number(),
+    month: zod.number(),
+    year: zod.number(),
+    allTime: zod.number(),
+  }),
+  series: zod.object({
+    day: zod.array(
+      zod.object({
+        label: zod.string(),
+        count: zod.number(),
+      }),
+    ),
+    week: zod.array(
+      zod.object({
+        label: zod.string(),
+        count: zod.number(),
+      }),
+    ),
+    month: zod.array(
+      zod.object({
+        label: zod.string(),
+        count: zod.number(),
+      }),
+    ),
+    year: zod.array(
+      zod.object({
+        label: zod.string(),
+        count: zod.number(),
+      }),
+    ),
+    allTime: zod.array(
+      zod.object({
+        label: zod.string(),
+        count: zod.number(),
+      }),
+    ),
+  }),
+});

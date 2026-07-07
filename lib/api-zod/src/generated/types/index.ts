@@ -6,9 +6,14 @@
  * OpenAPI spec version: 0.1.0
  */
 
+export * from "./authUser";
 export * from "./createTranscriptionBody";
 export * from "./errorResponse";
 export * from "./healthStatus";
+export * from "./loginAnalytics";
+export * from "./loginAnalyticsPoint";
+export * from "./loginAnalyticsSeries";
+export * from "./loginAnalyticsTotals";
 export * from "./transcription";
 export * from "./transcriptionStats";
 export * from "./transcriptionStatus";
