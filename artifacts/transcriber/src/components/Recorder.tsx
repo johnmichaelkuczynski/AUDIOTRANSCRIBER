@@ -81,7 +81,7 @@ export function Recorder() {
       onError: (err) => {
         toast({
           title: "Transcription failed",
-          description: err?.error || "Could not transcribe the recording. Please try again.",
+          description: err?.data?.error || "Could not transcribe the recording. Please try again.",
           variant: "destructive",
         });
       },

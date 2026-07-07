@@ -1,5 +1,5 @@
 import { useState, useRef } from "react";
-import { Transcription } from "@workspace/api-client-react/src/generated/api.schemas";
+import type { Transcription } from "@workspace/api-client-react";
 import { useDeleteTranscription, getListTranscriptionsQueryKey, getGetTranscriptionStatsQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { formatFileSize, formatDate } from "@/lib/format";

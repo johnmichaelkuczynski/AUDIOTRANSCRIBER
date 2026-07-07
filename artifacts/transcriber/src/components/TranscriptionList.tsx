@@ -1,4 +1,7 @@
-import { useListTranscriptions } from "@workspace/api-client-react";
+import {
+  useListTranscriptions,
+  getListTranscriptionsQueryKey,
+} from "@workspace/api-client-react";
 import { TranscriptionCard } from "./TranscriptionCard";
 import { Skeleton } from "@/components/ui/skeleton";
 import { FileAudio } from "lucide-react";
@@ -6,6 +9,7 @@ import { FileAudio } from "lucide-react";
 export function TranscriptionList() {
   const { data: transcriptions, isLoading } = useListTranscriptions({
     query: {
+      queryKey: getListTranscriptionsQueryKey(),
       refetchInterval: (query) => {
         // Refetch frequently if there are processing transcriptions
         const hasProcessing = query.state.data?.some(t => t.status === "processing");

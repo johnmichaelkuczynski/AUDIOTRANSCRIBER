@@ -23,7 +23,7 @@ export function UploadArea() {
       onError: (err) => {
         toast({
           title: "Upload failed",
-          description: err?.error || "Failed to upload the file. Please try again.",
+          description: err?.data?.error || "Failed to upload the file. Please try again.",
           variant: "destructive",
         });
       },
