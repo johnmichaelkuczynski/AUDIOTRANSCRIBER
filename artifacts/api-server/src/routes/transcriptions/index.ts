@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import multer from "multer";
-import { eq, sql, count, and } from "drizzle-orm";
+import { eq, sql, count } from "drizzle-orm";
 import { db, transcriptionsTable } from "@workspace/db";
 import { speechToText, ensureCompatibleFormat } from "@workspace/integrations-openai-ai-server/audio";
 import {
@@ -16,7 +16,6 @@ import {
 import { logger } from "../../lib/logger";
 import { transformTranscript } from "../../lib/llm";
 import { ObjectStorageService, ObjectNotFoundError } from "../../lib/objectStorage";
-import type { AuthedRequest } from "../../middlewares/requireAuth";
 
 const router: IRouter = Router();
 
@@ -27,11 +26,10 @@ const upload = multer({
   limits: { fileSize: 50 * 1024 * 1024 },
 });
 
-router.get("/transcriptions", async (req: AuthedRequest, res): Promise<void> => {
+router.get("/transcriptions", async (_req, res): Promise<void> => {
   const transcriptions = await db
     .select()
     .from(transcriptionsTable)
-    .where(eq(transcriptionsTable.userId, req.userId!))
     .orderBy(sql`${transcriptionsTable.createdAt} DESC`);
 
   const parsed = transcriptions.map((t) => ListTranscriptionsResponseItem.parse(t));
@@ -66,7 +64,6 @@ router.post("/transcriptions", upload.single("file"), async (req, res): Promise<
     [record] = await db
       .insert(transcriptionsTable)
       .values({
-        userId: (req as AuthedRequest).userId!,
         filename: file.originalname,
         fileSize: file.size,
         status: "processing",
@@ -109,7 +106,7 @@ router.post("/transcriptions", upload.single("file"), async (req, res): Promise<
   }
 });
 
-router.post("/transcriptions/:id/transform", async (req: AuthedRequest, res): Promise<void> => {
+router.post("/transcriptions/:id/transform", async (req, res): Promise<void> => {
   const params = TransformTranscriptionParams.safeParse(req.params);
   if (!params.success) {
     res.status(400).json({ error: params.error.message });
@@ -128,7 +125,7 @@ router.post("/transcriptions/:id/transform", async (req: AuthedRequest, res): Pr
   const [transcription] = await db
     .select()
     .from(transcriptionsTable)
-    .where(and(eq(transcriptionsTable.id, params.data.id), eq(transcriptionsTable.userId, req.userId!)));
+    .where(eq(transcriptionsTable.id, params.data.id));
 
   if (!transcription) {
     res.status(404).json({ error: "Transcription not found" });
@@ -160,15 +157,14 @@ router.post("/transcriptions/:id/transform", async (req: AuthedRequest, res): Pr
   }
 });
 
-router.get("/transcriptions/stats", async (req: AuthedRequest, res): Promise<void> => {
+router.get("/transcriptions/stats", async (_req, res): Promise<void> => {
   const [stats] = await db
     .select({
       totalCount: count(),
       completedCount: sql<number>`count(*) filter (where ${transcriptionsTable.status} = 'completed')`,
       totalFileSize: sql<number>`coalesce(sum(${transcriptionsTable.fileSize}), 0)`,
     })
-    .from(transcriptionsTable)
-    .where(eq(transcriptionsTable.userId, req.userId!));
+    .from(transcriptionsTable);
 
   res.json(
     GetTranscriptionStatsResponse.parse({
@@ -179,7 +175,7 @@ router.get("/transcriptions/stats", async (req: AuthedRequest, res): Promise<voi
   );
 });
 
-router.get("/transcriptions/:id", async (req: AuthedRequest, res): Promise<void> => {
+router.get("/transcriptions/:id", async (req, res): Promise<void> => {
   const params = GetTranscriptionParams.safeParse(req.params);
   if (!params.success) {
     res.status(400).json({ error: params.error.message });
@@ -189,7 +185,7 @@ router.get("/transcriptions/:id", async (req: AuthedRequest, res): Promise<void>
   const [transcription] = await db
     .select()
     .from(transcriptionsTable)
-    .where(and(eq(transcriptionsTable.id, params.data.id), eq(transcriptionsTable.userId, req.userId!)));
+    .where(eq(transcriptionsTable.id, params.data.id));
 
   if (!transcription) {
     res.status(404).json({ error: "Transcription not found" });
@@ -199,7 +195,7 @@ router.get("/transcriptions/:id", async (req: AuthedRequest, res): Promise<void>
   res.json(GetTranscriptionResponse.parse(transcription));
 });
 
-router.get("/transcriptions/:id/audio", async (req: AuthedRequest, res): Promise<void> => {
+router.get("/transcriptions/:id/audio", async (req, res): Promise<void> => {
   const params = GetTranscriptionParams.safeParse(req.params);
   if (!params.success) {
     res.status(400).json({ error: params.error.message });
@@ -209,7 +205,7 @@ router.get("/transcriptions/:id/audio", async (req: AuthedRequest, res): Promise
   const [transcription] = await db
     .select()
     .from(transcriptionsTable)
-    .where(and(eq(transcriptionsTable.id, params.data.id), eq(transcriptionsTable.userId, req.userId!)));
+    .where(eq(transcriptionsTable.id, params.data.id));
 
   if (!transcription) {
     res.status(404).json({ error: "Transcription not found" });
@@ -268,7 +264,7 @@ router.get("/transcriptions/:id/audio", async (req: AuthedRequest, res): Promise
   }
 });
 
-router.delete("/transcriptions/:id", async (req: AuthedRequest, res): Promise<void> => {
+router.delete("/transcriptions/:id", async (req, res): Promise<void> => {
   const params = DeleteTranscriptionParams.safeParse(req.params);
   if (!params.success) {
     res.status(400).json({ error: params.error.message });
@@ -277,7 +273,7 @@ router.delete("/transcriptions/:id", async (req: AuthedRequest, res): Promise<vo
 
   const [deleted] = await db
     .delete(transcriptionsTable)
-    .where(and(eq(transcriptionsTable.id, params.data.id), eq(transcriptionsTable.userId, req.userId!)))
+    .where(eq(transcriptionsTable.id, params.data.id))
     .returning();
 
   if (!deleted) {

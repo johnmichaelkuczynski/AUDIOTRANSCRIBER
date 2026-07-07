@@ -2,15 +2,9 @@ import { UploadArea } from "@/components/UploadArea";
 import { Recorder } from "@/components/Recorder";
 import { TranscriptionList } from "@/components/TranscriptionList";
 import { StatsSummary } from "@/components/StatsSummary";
-import { Waves, LogOut } from "lucide-react";
-import { useUser, useClerk } from "@clerk/react";
-
-const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
+import { Waves } from "lucide-react";
 
 export default function Home() {
-  const { user } = useUser();
-  const { signOut } = useClerk();
-
   return (
     <div className="min-h-[100dvh] bg-background">
       <header className="sticky top-0 z-10 bg-background/80 backdrop-blur-md border-b border-border">
@@ -22,23 +16,6 @@ export default function Home() {
             <h1 className="text-xl font-bold tracking-tight text-foreground">
               Transcriber
             </h1>
-          </div>
-          <div className="flex items-center gap-3 sm:gap-4">
-            {user && (
-              <span className="hidden sm:inline text-sm font-medium text-muted-foreground">
-                {user.primaryEmailAddress?.emailAddress ??
-                  user.fullName ??
-                  "Signed in"}
-              </span>
-            )}
-            <button
-              type="button"
-              onClick={() => signOut({ redirectUrl: basePath || "/" })}
-              className="inline-flex items-center gap-1.5 text-sm font-medium text-foreground hover:text-primary transition-colors"
-            >
-              <LogOut className="w-4 h-4" />
-              <span className="hidden sm:inline">Log out</span>
-            </button>
           </div>
         </div>
       </header>

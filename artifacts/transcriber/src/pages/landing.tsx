@@ -19,17 +19,10 @@ export default function Landing() {
           <div className="flex items-center gap-3">
             <button
               type="button"
-              onClick={() => setLocation("/sign-in")}
-              className="text-sm font-medium text-foreground hover:text-primary transition-colors px-3 py-2"
-            >
-              Sign in
-            </button>
-            <button
-              type="button"
-              onClick={() => setLocation("/sign-up")}
+              onClick={() => setLocation("/app")}
               className="text-sm font-semibold rounded-lg bg-primary text-primary-foreground px-4 py-2 shadow-sm hover:bg-primary/90 transition-colors"
             >
-              Get started
+              Open app
             </button>
           </div>
         </div>
@@ -51,17 +44,10 @@ export default function Landing() {
           <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-3">
             <button
               type="button"
-              onClick={() => setLocation("/sign-up")}
+              onClick={() => setLocation("/app")}
               className="w-full sm:w-auto text-base font-semibold rounded-xl bg-primary text-primary-foreground px-7 py-3.5 shadow-sm hover:bg-primary/90 transition-colors"
             >
               Get started free
-            </button>
-            <button
-              type="button"
-              onClick={() => setLocation("/sign-in")}
-              className="w-full sm:w-auto text-base font-semibold rounded-xl border border-border bg-card text-foreground px-7 py-3.5 hover:bg-secondary transition-colors"
-            >
-              Sign in
             </button>
           </div>
         </section>
