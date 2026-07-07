@@ -14,6 +14,7 @@ export * from "./loginAnalytics";
 export * from "./loginAnalyticsPoint";
 export * from "./loginAnalyticsSeries";
 export * from "./loginAnalyticsTotals";
+export * from "./loginEventItem";
 export * from "./transcription";
 export * from "./transcriptionStats";
 export * from "./transcriptionStatus";

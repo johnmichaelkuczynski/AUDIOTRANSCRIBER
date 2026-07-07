@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
-import { sql, count } from "drizzle-orm";
-import { db, loginEventsTable } from "@workspace/db";
+import { sql, count, desc, eq } from "drizzle-orm";
+import { db, loginEventsTable, usersTable } from "@workspace/db";
 import { requireAuth } from "../../middlewares/requireAuth";
 import { logger } from "../../lib/logger";
 
@@ -32,7 +32,20 @@ router.get("/analytics/logins", requireAuth, async (_req, res): Promise<void> =>
       })
       .from(loginEventsTable);
 
-    const [day, week, month, year, allTime] = await Promise.all([
+    const recentLoginsPromise = db
+      .select({
+        id: loginEventsTable.id,
+        email: loginEventsTable.email,
+        name: usersTable.name,
+        picture: usersTable.picture,
+        createdAt: loginEventsTable.createdAt,
+      })
+      .from(loginEventsTable)
+      .leftJoin(usersTable, eq(loginEventsTable.userId, usersTable.id))
+      .orderBy(desc(loginEventsTable.createdAt))
+      .limit(200);
+
+    const [day, week, month, year, allTime, recentLogins] = await Promise.all([
       series(sql`
         select to_char(h, 'HH24:00') as label, coalesce(c.cnt, 0) as count
         from generate_series(
@@ -107,6 +120,7 @@ router.get("/analytics/logins", requireAuth, async (_req, res): Promise<void> =>
         ) c on c.bucket = m
         order by m
       `),
+      recentLoginsPromise,
     ]);
 
     res.json({
@@ -118,6 +132,13 @@ router.get("/analytics/logins", requireAuth, async (_req, res): Promise<void> =>
         allTime: Number(totals.allTime),
       },
       series: { day, week, month, year, allTime },
+      recentLogins: recentLogins.map((l) => ({
+        id: l.id,
+        email: l.email,
+        name: l.name ?? null,
+        picture: l.picture ?? null,
+        createdAt: l.createdAt,
+      })),
     });
   } catch (err) {
     logger.error({ err }, "Failed to compute login analytics");

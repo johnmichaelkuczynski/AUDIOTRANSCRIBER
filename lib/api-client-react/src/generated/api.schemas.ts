@@ -35,9 +35,21 @@ export interface LoginAnalyticsSeries {
   allTime: LoginAnalyticsPoint[];
 }
 
+export interface LoginEventItem {
+  id: number;
+  email: string;
+  /** @nullable */
+  name: string | null;
+  /** @nullable */
+  picture: string | null;
+  createdAt: string;
+}
+
 export interface LoginAnalytics {
   totals: LoginAnalyticsTotals;
   series: LoginAnalyticsSeries;
+  /** Most recent login events, newest first */
+  recentLogins: LoginEventItem[];
 }
 
 export interface HealthStatus {

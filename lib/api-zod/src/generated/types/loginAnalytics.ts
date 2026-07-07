@@ -7,8 +7,11 @@
  */
 import type { LoginAnalyticsSeries } from "./loginAnalyticsSeries";
 import type { LoginAnalyticsTotals } from "./loginAnalyticsTotals";
+import type { LoginEventItem } from "./loginEventItem";
 
 export interface LoginAnalytics {
   totals: LoginAnalyticsTotals;
   series: LoginAnalyticsSeries;
+  /** Most recent login events, newest first */
+  recentLogins: LoginEventItem[];
 }

@@ -12,7 +12,7 @@ import { useAuth } from "@/hooks/useAuth";
 import NotFound from "@/pages/not-found";
 import Home from "@/pages/home";
 import Landing from "@/pages/landing";
-import Analytics from "@/pages/analytics";
+import Admin from "@/pages/admin";
 
 const queryClient = new QueryClient();
 
@@ -46,9 +46,9 @@ function App() {
                 <Home />
               </RequireAuth>
             </Route>
-            <Route path="/analytics">
+            <Route path="/admin">
               <RequireAuth>
-                <Analytics />
+                <Admin />
               </RequireAuth>
             </Route>
             <Route component={NotFound} />

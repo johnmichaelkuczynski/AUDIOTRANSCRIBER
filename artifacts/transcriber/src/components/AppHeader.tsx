@@ -29,15 +29,15 @@ export function AppHeader() {
         </div>
         <div className="flex items-center gap-3 sm:gap-4">
           <Link
-            href="/analytics"
+            href="/admin"
             className={`inline-flex items-center gap-1.5 text-sm font-medium transition-colors ${
-              location === "/analytics"
+              location === "/admin"
                 ? "text-primary"
                 : "text-foreground hover:text-primary"
             }`}
           >
             <BarChart3 className="w-4 h-4" />
-            <span className="hidden sm:inline">Analytics</span>
+            <span className="hidden sm:inline">Administrative</span>
           </Link>
           {user && (
             <span className="hidden sm:flex items-center gap-2 text-sm font-medium text-muted-foreground">

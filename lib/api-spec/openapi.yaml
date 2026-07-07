@@ -330,6 +330,26 @@ components:
         - month
         - year
         - allTime
+    LoginEventItem:
+      type: object
+      properties:
+        id:
+          type: integer
+        email:
+          type: string
+        name:
+          type: ["string", "null"]
+        picture:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - email
+        - name
+        - picture
+        - createdAt
     LoginAnalytics:
       type: object
       properties:
@@ -337,9 +357,15 @@ components:
           $ref: "#/components/schemas/LoginAnalyticsTotals"
         series:
           $ref: "#/components/schemas/LoginAnalyticsSeries"
+        recentLogins:
+          type: array
+          description: Most recent login events, newest first
+          items:
+            $ref: "#/components/schemas/LoginEventItem"
       required:
         - totals
         - series
+        - recentLogins
     HealthStatus:
       type: object
       properties:

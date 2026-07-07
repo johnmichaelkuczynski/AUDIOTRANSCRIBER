@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useGetLoginAnalytics } from "@workspace/api-client-react";
+import { useGetLoginAnalytics, getGetLoginAnalyticsQueryKey } from "@workspace/api-client-react";
 import {
   ResponsiveContainer,
   BarChart,
@@ -9,6 +9,7 @@ import {
   CartesianGrid,
   Tooltip,
 } from "recharts";
+import { Users } from "lucide-react";
 import { AppHeader } from "@/components/AppHeader";
 
 type RangeKey = "day" | "week" | "month" | "year" | "allTime";
@@ -21,9 +22,21 @@ const RANGES: { key: RangeKey; label: string; description: string }[] = [
   { key: "allTime", label: "All time", description: "Monthly, since first login" },
 ];
 
-export default function Analytics() {
+function formatLoginDate(iso: string): string {
+  return new Date(iso).toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+export default function Admin() {
   const [range, setRange] = useState<RangeKey>("week");
-  const { data, isLoading, isError } = useGetLoginAnalytics();
+  const { data, isLoading, isError } = useGetLoginAnalytics({
+    query: { queryKey: getGetLoginAnalyticsQueryKey() },
+  });
 
   const active = RANGES.find((r) => r.key === range)!;
 
@@ -33,8 +46,8 @@ export default function Analytics() {
 
       <main className="max-w-5xl mx-auto px-4 sm:px-6 py-8 sm:py-12 space-y-8">
         <div className="space-y-1">
-          <h2 className="text-2xl font-bold tracking-tight text-foreground">Login Analytics</h2>
-          <p className="text-muted-foreground">Google sign-ins over time.</p>
+          <h2 className="text-2xl font-bold tracking-tight text-foreground">Administrative</h2>
+          <p className="text-muted-foreground">Google sign-in activity and analytics.</p>
         </div>
 
         {isLoading && (
@@ -45,7 +58,7 @@ export default function Analytics() {
 
         {isError && (
           <div className="rounded-2xl border border-destructive/30 bg-destructive/5 p-6 text-destructive">
-            Failed to load analytics. Please try again.
+            Failed to load data. Please try again.
           </div>
         )}
 
@@ -109,6 +122,52 @@ export default function Analytics() {
                   </BarChart>
                 </ResponsiveContainer>
               </div>
+            </div>
+
+            <div className="rounded-2xl border border-border bg-card">
+              <div className="p-4 sm:p-6 border-b border-border flex items-center gap-2">
+                <Users className="w-4 h-4 text-primary" />
+                <h3 className="font-bold text-foreground">Login history</h3>
+                <span className="ml-auto text-xs text-muted-foreground">
+                  {data.recentLogins.length} most recent
+                </span>
+              </div>
+              {data.recentLogins.length === 0 ? (
+                <div className="p-8 text-center text-sm text-muted-foreground">
+                  No logins recorded yet.
+                </div>
+              ) : (
+                <ul className="divide-y divide-border">
+                  {data.recentLogins.map((login) => (
+                    <li
+                      key={login.id}
+                      className="px-4 sm:px-6 py-3 flex items-center gap-3"
+                    >
+                      {login.picture ? (
+                        <img
+                          src={login.picture}
+                          alt=""
+                          referrerPolicy="no-referrer"
+                          className="w-8 h-8 rounded-full border border-border shrink-0"
+                        />
+                      ) : (
+                        <div className="w-8 h-8 rounded-full bg-accent flex items-center justify-center text-xs font-bold text-accent-foreground shrink-0">
+                          {login.email.charAt(0).toUpperCase()}
+                        </div>
+                      )}
+                      <div className="min-w-0 flex-1">
+                        <div className="text-sm font-medium text-foreground truncate">
+                          {login.name ?? login.email}
+                        </div>
+                        <div className="text-xs text-muted-foreground truncate">{login.email}</div>
+                      </div>
+                      <div className="text-xs text-muted-foreground whitespace-nowrap">
+                        {formatLoginDate(login.createdAt)}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
           </>
         )}

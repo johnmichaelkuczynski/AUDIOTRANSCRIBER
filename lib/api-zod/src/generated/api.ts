@@ -186,4 +186,15 @@ export const GetLoginAnalyticsResponse = zod.object({
       }),
     ),
   }),
+  recentLogins: zod
+    .array(
+      zod.object({
+        id: zod.number(),
+        email: zod.string(),
+        name: zod.string().nullable(),
+        picture: zod.string().nullable(),
+        createdAt: zod.coerce.date(),
+      }),
+    )
+    .describe("Most recent login events, newest first"),
 });
