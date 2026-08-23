@@ -74,7 +74,7 @@ export function TranscriptionCard({ transcription }: TranscriptionCardProps) {
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
     anchor.href = url;
-    anchor.download = `${baseName}-transcript.txt`;
+    anchor.download = `${baseName}-original-transcript.txt`;
     document.body.appendChild(anchor);
     anchor.click();
     document.body.removeChild(anchor);
@@ -169,7 +169,26 @@ export function TranscriptionCard({ transcription }: TranscriptionCardProps) {
         )}
         
         {isCompleted && transcription.audioPath && (
-          <div className="mb-3">
+          <div className="mb-3 space-y-2">
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-xs font-bold uppercase tracking-wide text-foreground">
+                Source recording
+              </p>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-9 gap-2 font-semibold"
+                asChild
+              >
+                <a
+                  href={`/api/transcriptions/${transcription.id}/audio?download=1`}
+                  download={transcription.filename}
+                >
+                  <Download className="w-4 h-4" />
+                  Download source recording
+                </a>
+              </Button>
+            </div>
             <audio
               ref={audioRef}
               preload="none"
@@ -195,9 +214,25 @@ export function TranscriptionCard({ transcription }: TranscriptionCardProps) {
 
         {isCompleted && transcription.text && (
           <div className="relative">
-            <p className="mb-2 text-xs font-semibold text-muted-foreground">
-              Original transcription: {originalWordCount.toLocaleString()} words
-            </p>
+            <div className="mb-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-wide text-foreground">
+                  Original transcript
+                </p>
+                <p className="text-xs font-semibold text-muted-foreground">
+                  {originalWordCount.toLocaleString()} words
+                </p>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-9 gap-2 font-semibold"
+                onClick={handleDownloadTranscript}
+              >
+                <Download className="w-4 h-4" />
+                Download original transcript (.txt)
+              </Button>
+            </div>
             <p className="text-sm text-foreground/90 whitespace-pre-wrap leading-relaxed font-mono bg-muted/30 p-4 rounded-lg border border-border/40 max-h-[300px] overflow-y-auto">
               {transcription.text}
             </p>
@@ -236,7 +271,7 @@ export function TranscriptionCard({ transcription }: TranscriptionCardProps) {
               {copied ? "Copied" : "Copy text"}
             </Button>
           )}
-          {transcription.text && (
+          {!isCompleted && transcription.text && (
             <Button
               variant="outline"
               size="sm"
@@ -244,17 +279,17 @@ export function TranscriptionCard({ transcription }: TranscriptionCardProps) {
               onClick={handleDownloadTranscript}
             >
               <Download className="w-4 h-4" />
-              Download transcript
+              Download current transcript (.txt)
             </Button>
           )}
-          {transcription.audioPath && (
+          {!isCompleted && transcription.audioPath && (
             <Button variant="outline" size="sm" className="h-8 gap-2" asChild>
               <a
                 href={`/api/transcriptions/${transcription.id}/audio?download=1`}
                 download={transcription.filename}
               >
                 <Download className="w-4 h-4" />
-                Download recording
+                Download source recording
               </a>
             </Button>
           )}

@@ -119,7 +119,8 @@ export function CoherencePanel({
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `transcript-${type}-${jobId.substring(0, 8)}.txt`;
+    const artifactType = type === "play" ? "play" : "perfect-transcript";
+    a.download = `${artifactType}-${jobId.substring(0, 8)}.txt`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -208,7 +209,9 @@ export function CoherencePanel({
                   }
                 >
                   <Download className="mr-2 h-4 w-4" />
-                  Download
+                  {latestCompletedJob.jobType === "play"
+                    ? "Download play (.txt)"
+                    : "Download perfect transcript (.txt)"}
                 </Button>
               </div>
             </div>
@@ -342,8 +345,11 @@ export function CoherencePanel({
                     ) : (
                       <Loader2 className="w-4 h-4 text-primary animate-spin" />
                     )}
-                    <span className="text-sm font-medium capitalize">
-                      {job.jobType} <span className="text-muted-foreground font-normal text-xs ml-1">({job.fidelityMode})</span>
+                    <span className="text-sm font-medium">
+                      {job.jobType === "play" ? "Play" : "Perfect transcript"}{" "}
+                      <span className="text-muted-foreground font-normal text-xs ml-1">
+                        ({job.fidelityMode})
+                      </span>
                     </span>
                   </div>
                   <div className="text-xs text-muted-foreground flex items-center gap-3">
@@ -414,7 +420,9 @@ export function CoherencePanel({
                             onClick={() => handleDownload(job.finalOutput!, job.id, job.jobType)}
                           >
                             <Download className="w-3 h-3 mr-1" />
-                            Download
+                            {job.jobType === "play"
+                              ? "Download play (.txt)"
+                              : "Download perfect transcript (.txt)"}
                           </Button>
                         </div>
                       </div>

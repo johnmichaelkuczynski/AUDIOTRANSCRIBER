@@ -213,13 +213,25 @@ export function TransformPanel({
   const isRewriting = transformMutation.isPending && activeMode === "rewrite";
   const busy = transformMutation.isPending || isRemovingFillers;
   const originalWordCount = countWords(transcriptionText);
+  const resultDownloadLabel =
+    result?.mode === "cleanup"
+      ? "Download filler-free transcript (.txt)"
+      : result?.mode === "speakers"
+        ? "Download speaker-formatted transcript (.txt)"
+        : "Download rewritten transcript (.txt)";
 
   return (
     <div className="mt-4 space-y-4 rounded-lg border border-border/40 bg-muted/10 p-4">
       <div className="flex flex-wrap items-center gap-3">
-        <div className="flex items-center gap-2 text-sm font-medium text-foreground">
-          <Sparkles className="h-4 w-4 text-primary" />
-          AI tools
+        <div>
+          <div className="flex items-center gap-2 text-sm font-medium text-foreground">
+            <Sparkles className="h-4 w-4 text-primary" />
+            AI tools
+          </div>
+          <p className="mt-1 text-xs text-muted-foreground">
+            These tools create separate versions. The original transcript above
+            remains unchanged.
+          </p>
         </div>
         <div className="ml-auto flex items-center gap-2">
           <Label htmlFor={`provider-${transcriptionId}`} className="text-xs text-muted-foreground">
@@ -361,7 +373,7 @@ export function TransformPanel({
                 className="h-7 gap-1.5 text-xs text-muted-foreground hover:text-foreground"
               >
                 <Download className="h-3.5 w-3.5" />
-                Download
+                {resultDownloadLabel}
               </Button>
             </div>
           </div>
