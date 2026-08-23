@@ -14,3 +14,23 @@ export function formatDate(dateString: string): string {
     minute: "2-digit",
   }).format(new Date(dateString));
 }
+
+export function countWords(text: string | null | undefined): number {
+  const trimmed = text?.trim();
+  return trimmed ? trimmed.split(/\s+/u).length : 0;
+}
+
+export function formatWordCountComparison(
+  versionWordCount: number,
+  originalWordCount: number,
+): string {
+  if (originalWordCount === 0) {
+    return `${versionWordCount.toLocaleString()} words`;
+  }
+
+  const difference = versionWordCount - originalWordCount;
+  const percentage = (difference / originalWordCount) * 100;
+  const sign = difference > 0 ? "+" : "";
+
+  return `${versionWordCount.toLocaleString()} words · Original: ${originalWordCount.toLocaleString()} · ${sign}${difference.toLocaleString()} (${sign}${percentage.toFixed(1)}%)`;
+}

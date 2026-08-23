@@ -16,18 +16,25 @@ import { Progress } from "@/components/ui/progress";
 import { Loader2, Sparkles, Copy, Download, AlertCircle, Check, Drama, RefreshCcw, Info } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { countWords, formatWordCountComparison } from "@/lib/format";
 
 interface CoherencePanelProps {
   transcriptionId: number;
+  originalWordCount: number;
 }
 
-export function CoherencePanel({ transcriptionId }: CoherencePanelProps) {
+export function CoherencePanel({
+  transcriptionId,
+  originalWordCount,
+}: CoherencePanelProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
   // Create job form state
   const [specs, setSpecs] = useState("");
-  const [wordCount, setWordCount] = useState<string>("5000");
+  const [wordCount, setWordCount] = useState<string>(
+    String(Math.min(60000, Math.max(1, originalWordCount))),
+  );
   const [fidelity, setFidelity] = useState<CoherenceJobInputFidelityMode>("adaptive");
   
   const [copiedJobId, setCopiedJobId] = useState<string | null>(null);
@@ -169,7 +176,10 @@ export function CoherencePanel({ transcriptionId }: CoherencePanelProps) {
                       : "Perfect transcript ready"}
                   </p>
                   <p className="text-sm text-muted-foreground">
-                    {latestCompletedJob.finalWordCount?.toLocaleString()} words
+                    {formatWordCountComparison(
+                      countWords(latestCompletedJob.finalOutput),
+                      originalWordCount,
+                    )}
                   </p>
                 </div>
               </div>
@@ -377,7 +387,14 @@ export function CoherencePanel({ transcriptionId }: CoherencePanelProps) {
                     <div className="space-y-2 pt-1">
                       <div className="flex items-center justify-between text-xs text-muted-foreground">
                         <span>
-                          Word count: {job.finalWordCount?.toLocaleString()} 
+                          {job.jobType === "play"
+                            ? "Play"
+                            : "Perfect transcript"}
+                          :{" "}
+                          {formatWordCountComparison(
+                            countWords(job.finalOutput),
+                            originalWordCount,
+                          )}
                           {job.targetWordCount ? ` (Target: ${job.targetWordCount.toLocaleString()})` : ""}
                         </span>
                         <div className="flex gap-2">

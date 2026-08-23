@@ -29,6 +29,10 @@ import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { Progress } from "@/components/ui/progress";
 import { importTranscriptInChunks } from "@/lib/chunkedTextImport";
+import {
+  countWords,
+  formatWordCountComparison,
+} from "@/lib/format";
 
 type Provider = "openai" | "deepseek" | "anthropic" | "venice";
 type Mode = "cleanup" | "speakers" | "rewrite";
@@ -208,6 +212,7 @@ export function TransformPanel({
     transformMutation.isPending && activeMode === "speakers";
   const isRewriting = transformMutation.isPending && activeMode === "rewrite";
   const busy = transformMutation.isPending || isRemovingFillers;
+  const originalWordCount = countWords(transcriptionText);
 
   return (
     <div className="mt-4 space-y-4 rounded-lg border border-border/40 bg-muted/10 p-4">
@@ -329,6 +334,11 @@ export function TransformPanel({
                     {PROVIDER_LABEL[result.provider]}
                   </span>
                 </>
+                )}{" "}
+              ·{" "}
+              {formatWordCountComparison(
+                countWords(result.text),
+                originalWordCount,
               )}
             </div>
             <div className="flex items-center gap-1">

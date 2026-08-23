@@ -2,7 +2,7 @@ import { useState, useRef } from "react";
 import type { Transcription } from "@workspace/api-client-react";
 import { useDeleteTranscription, getListTranscriptionsQueryKey, getGetTranscriptionStatsQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
-import { formatFileSize, formatDate } from "@/lib/format";
+import { countWords, formatFileSize, formatDate } from "@/lib/format";
 import { Card, CardHeader, CardContent, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -84,6 +84,7 @@ export function TranscriptionCard({ transcription }: TranscriptionCardProps) {
   const isProcessing = transcription.status === "processing";
   const isFailed = transcription.status === "failed";
   const isCompleted = transcription.status === "completed";
+  const originalWordCount = countWords(transcription.text);
 
   return (
     <Card className="group overflow-hidden transition-all hover:shadow-md border-border/50">
@@ -143,9 +144,14 @@ export function TranscriptionCard({ transcription }: TranscriptionCardProps) {
               </div>
             </div>
             {transcription.text && (
-              <p className="text-sm text-foreground/90 whitespace-pre-wrap leading-relaxed font-mono bg-muted/30 p-4 rounded-lg border border-border/40 max-h-[300px] overflow-y-auto">
-                {transcription.text}
-              </p>
+              <>
+                <p className="text-xs font-semibold text-muted-foreground">
+                  Original transcription: {originalWordCount.toLocaleString()} words
+                </p>
+                <p className="text-sm text-foreground/90 whitespace-pre-wrap leading-relaxed font-mono bg-muted/30 p-4 rounded-lg border border-border/40 max-h-[300px] overflow-y-auto">
+                  {transcription.text}
+                </p>
+              </>
             )}
           </div>
         )}
@@ -189,6 +195,9 @@ export function TranscriptionCard({ transcription }: TranscriptionCardProps) {
 
         {isCompleted && transcription.text && (
           <div className="relative">
+            <p className="mb-2 text-xs font-semibold text-muted-foreground">
+              Original transcription: {originalWordCount.toLocaleString()} words
+            </p>
             <p className="text-sm text-foreground/90 whitespace-pre-wrap leading-relaxed font-mono bg-muted/30 p-4 rounded-lg border border-border/40 max-h-[300px] overflow-y-auto">
               {transcription.text}
             </p>
@@ -197,7 +206,10 @@ export function TranscriptionCard({ transcription }: TranscriptionCardProps) {
               transcriptionText={transcription.text}
               transcriptionFilename={transcription.filename}
             />
-            <CoherencePanel transcriptionId={transcription.id} />
+            <CoherencePanel
+              transcriptionId={transcription.id}
+              originalWordCount={originalWordCount}
+            />
           </div>
         )}
 
