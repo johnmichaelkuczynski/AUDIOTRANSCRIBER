@@ -1,34 +1,17 @@
 import React, { useState, useCallback } from "react";
-import { useCreateTranscription, getListTranscriptionsQueryKey, getGetTranscriptionStatsQueryKey } from "@workspace/api-client-react";
+import { getListTranscriptionsQueryKey, getGetTranscriptionStatsQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { UploadCloud, FileAudio, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { uploadAudioFileInChunks } from "@/lib/chunkedUpload";
 
 export function UploadArea() {
   const [isDragging, setIsDragging] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  
-  const createTranscription = useCreateTranscription({
-    mutation: {
-      onSuccess: () => {
-        toast({
-          title: "Transcription started",
-          description: "Your file is being processed. It will appear below shortly.",
-        });
-        queryClient.invalidateQueries({ queryKey: getListTranscriptionsQueryKey() });
-        queryClient.invalidateQueries({ queryKey: getGetTranscriptionStatsQueryKey() });
-      },
-      onError: (err) => {
-        toast({
-          title: "Upload failed",
-          description: err?.data?.error || "Failed to upload the file. Please try again.",
-          variant: "destructive",
-        });
-      },
-    },
-  });
+  const isUploading = uploadProgress !== null;
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -55,7 +38,7 @@ export function UploadArea() {
     }
   }, []);
 
-  const handleFiles = (files: FileList) => {
+  const handleFiles = async (files: FileList) => {
     const file = files[0];
     if (!file) return;
 
@@ -77,7 +60,29 @@ export function UploadArea() {
       return;
     }
 
-    createTranscription.mutate({ data: { file } });
+    setUploadProgress(0);
+    try {
+      await uploadAudioFileInChunks(file, setUploadProgress);
+      toast({
+        title: "Transcription started",
+        description: "Two-minute intervals will appear below as each one finishes.",
+      });
+      queryClient.invalidateQueries({ queryKey: getListTranscriptionsQueryKey() });
+      queryClient.invalidateQueries({ queryKey: getGetTranscriptionStatsQueryKey() });
+    } catch (err) {
+      toast({
+        title: "Upload failed",
+        description:
+          err instanceof Error
+            ? err.message
+            : "Failed to upload the file. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setUploadProgress(null);
+      const input = document.getElementById("file-upload") as HTMLInputElement | null;
+      if (input) input.value = "";
+    }
   };
 
   return (
@@ -87,12 +92,12 @@ export function UploadArea() {
         isDragging 
           ? "border-primary bg-primary/5 scale-[1.02]" 
           : "border-border bg-card hover:border-primary/50 hover:bg-card/80",
-        createTranscription.isPending && "pointer-events-none opacity-80"
+        isUploading && "pointer-events-none opacity-80"
       )}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
-      onClick={() => !createTranscription.isPending && document.getElementById("file-upload")?.click()}
+      onClick={() => !isUploading && document.getElementById("file-upload")?.click()}
     >
       <input
         id="file-upload"
@@ -100,14 +105,24 @@ export function UploadArea() {
         accept="audio/*,.mp3,.wav,.m4a,.ogg"
         className="hidden"
         onChange={handleFileInput}
-        disabled={createTranscription.isPending}
+        disabled={isUploading}
       />
       
-      {createTranscription.isPending ? (
+      {isUploading ? (
         <div className="flex flex-col items-center animate-in fade-in zoom-in duration-300">
           <Loader2 className="w-12 h-12 text-primary animate-spin mb-4" />
-          <p className="text-lg font-medium text-foreground">Uploading & Processing</p>
-          <p className="text-sm text-muted-foreground mt-1">This might take a moment...</p>
+          <p className="text-lg font-medium text-foreground">
+            Uploading {uploadProgress}%
+          </p>
+          <div className="w-64 max-w-full h-2 rounded-full bg-muted mt-3 overflow-hidden">
+            <div
+              className="h-full bg-primary transition-all duration-300"
+              style={{ width: `${uploadProgress}%` }}
+            />
+          </div>
+          <p className="text-sm text-muted-foreground mt-2">
+            Sent in retryable 8 MB pieces
+          </p>
         </div>
       ) : (
         <div className="flex flex-col items-center animate-in fade-in zoom-in duration-300">

@@ -114,10 +114,23 @@ export function TranscriptionCard({ transcription }: TranscriptionCardProps) {
       
       <CardContent className="pt-4 pb-2">
         {isProcessing && (
-          <div className="flex flex-col items-center justify-center py-6 text-muted-foreground">
-            <Loader2 className="w-6 h-6 animate-spin mb-2" />
-            <p className="text-sm font-medium text-foreground">AI is transcribing your audio...</p>
-            <p className="text-xs mt-1">This usually takes a fraction of the audio duration.</p>
+          <div className="space-y-3">
+            <div className="flex items-center gap-2 text-muted-foreground">
+              <Loader2 className="w-5 h-5 animate-spin" />
+              <div>
+                <p className="text-sm font-medium text-foreground">
+                  Transcribing two-minute intervals...
+                </p>
+                <p className="text-xs mt-0.5">
+                  Completed intervals appear below immediately.
+                </p>
+              </div>
+            </div>
+            {transcription.text && (
+              <p className="text-sm text-foreground/90 whitespace-pre-wrap leading-relaxed font-mono bg-muted/30 p-4 rounded-lg border border-border/40 max-h-[300px] overflow-y-auto">
+                {transcription.text}
+              </p>
+            )}
           </div>
         )}
         

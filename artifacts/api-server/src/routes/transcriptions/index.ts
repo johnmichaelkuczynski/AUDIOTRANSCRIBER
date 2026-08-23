@@ -1,7 +1,9 @@
 import { Router, type IRouter, type RequestHandler } from "express";
 import multer from "multer";
-import { createReadStream } from "node:fs";
-import { unlink } from "node:fs/promises";
+import { createReadStream, createWriteStream } from "node:fs";
+import { unlink, writeFile } from "node:fs/promises";
+import { pipeline } from "node:stream/promises";
+import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { randomUUID } from "node:crypto";
 import { eq, sql, count } from "drizzle-orm";
@@ -32,6 +34,9 @@ import { countWords, createPersistedCoherenceJob, enqueueCoherenceJob } from "..
 const router: IRouter = Router();
 
 const objectStorage = new ObjectStorageService();
+const MAX_AUDIO_FILE_BYTES = 1024 * 1024 * 1024;
+const UPLOAD_CHUNK_BYTES = 8 * 1024 * 1024;
+const UPLOAD_SESSION_TTL_MS = 60 * 60 * 1000;
 
 const upload = multer({
   storage: multer.diskStorage({
@@ -40,7 +45,17 @@ const upload = multer({
       callback(null, `transcriber-upload-${randomUUID()}`);
     },
   }),
-  limits: { fileSize: 1024 * 1024 * 1024 },
+  limits: { fileSize: MAX_AUDIO_FILE_BYTES },
+});
+
+const chunkUpload = multer({
+  storage: multer.diskStorage({
+    destination: tmpdir(),
+    filename: (_req, _file, callback) => {
+      callback(null, `transcriber-chunk-${randomUUID()}`);
+    },
+  }),
+  limits: { fileSize: UPLOAD_CHUNK_BYTES + 64 * 1024 },
 });
 
 const uploadSingleAudio: RequestHandler = (req, res, next) => {
@@ -57,6 +72,172 @@ const uploadSingleAudio: RequestHandler = (req, res, next) => {
     next();
   });
 };
+
+const uploadSingleChunk: RequestHandler = (req, res, next) => {
+  chunkUpload.single("chunk")(req, res, (err) => {
+    if (err instanceof multer.MulterError && err.code === "LIMIT_FILE_SIZE") {
+      res.status(413).json({ error: "Upload chunk is too large." });
+      return;
+    }
+    if (err) {
+      req.log.error({ err }, "Audio chunk upload failed");
+      res.status(400).json({ error: "The audio chunk could not be uploaded." });
+      return;
+    }
+    next();
+  });
+};
+
+type DiskAudioUpload = {
+  path: string;
+  originalname: string;
+  size: number;
+  mimetype: string;
+};
+
+type UploadSession = {
+  id: string;
+  path: string;
+  filename: string;
+  mimetype: string;
+  totalSize: number;
+  receivedBytes: number;
+  nextChunkIndex: number;
+  updatedAt: number;
+};
+
+const uploadSessions = new Map<string, UploadSession>();
+
+async function removeUploadSession(session: UploadSession): Promise<void> {
+  uploadSessions.delete(session.id);
+  await unlink(session.path).catch(() => {});
+}
+
+const uploadSessionCleanupTimer = setInterval(() => {
+  const cutoff = Date.now() - UPLOAD_SESSION_TTL_MS;
+  for (const session of uploadSessions.values()) {
+    if (session.updatedAt < cutoff) {
+      void removeUploadSession(session);
+    }
+  }
+}, 15 * 60 * 1000);
+uploadSessionCleanupTimer.unref();
+
+async function processDiskAudio(recordId: number, file: DiskAudioUpload): Promise<void> {
+  const storageTask = (async (): Promise<string | null> => {
+    try {
+      const uploadURL = await objectStorage.getObjectEntityUploadURL();
+      const stream = createReadStream(file.path);
+      const putRes = await fetch(uploadURL, {
+        method: "PUT",
+        body: stream as unknown as RequestInit["body"],
+        headers: { "Content-Type": file.mimetype || "application/octet-stream" },
+        duplex: "half",
+      } as RequestInit & { duplex: "half" });
+      if (!putRes.ok) {
+        throw new Error(`Storage upload failed with status ${putRes.status}`);
+      }
+      return objectStorage.normalizeObjectEntityPath(uploadURL);
+    } catch (err) {
+      logger.error({ err, id: recordId }, "Failed to persist audio to object storage");
+      return null;
+    }
+  })();
+
+  const transcriptionTask = transcribeAudioFile(file.path, {
+    onSegmentCompleted: async ({ segmentNumber, totalSegments, combinedText }) => {
+      await db
+        .update(transcriptionsTable)
+        .set({ text: combinedText })
+        .where(eq(transcriptionsTable.id, recordId));
+      logger.info(
+        { id: recordId, segmentNumber, totalSegments },
+        "Published completed transcription interval",
+      );
+    },
+  });
+
+  try {
+    const [storageResult, transcriptionResult] = await Promise.allSettled([
+      storageTask,
+      transcriptionTask,
+    ]);
+    const audioPath =
+      storageResult.status === "fulfilled" ? storageResult.value : null;
+
+    const [current] = await db
+      .select({ id: transcriptionsTable.id })
+      .from(transcriptionsTable)
+      .where(eq(transcriptionsTable.id, recordId));
+
+    if (!current) {
+      if (audioPath) {
+        try {
+          const orphan = await objectStorage.getObjectEntityFile(audioPath);
+          await orphan.delete();
+        } catch (cleanupErr) {
+          if (!(cleanupErr instanceof ObjectNotFoundError)) {
+            logger.error(
+              { err: cleanupErr, id: recordId },
+              "Failed to remove audio for a deleted transcription",
+            );
+          }
+        }
+      }
+      return;
+    }
+
+    if (transcriptionResult.status === "fulfilled") {
+      await db
+        .update(transcriptionsTable)
+        .set({
+          text: transcriptionResult.value,
+          status: "completed",
+          errorMessage: null,
+          audioPath,
+        })
+        .where(eq(transcriptionsTable.id, recordId));
+    } else {
+      logger.error(
+        { err: transcriptionResult.reason, id: recordId },
+        "Transcription failed",
+      );
+      const errorMessage =
+        transcriptionResult.reason instanceof Error
+          ? transcriptionResult.reason.message
+          : "Unknown error";
+      await db
+        .update(transcriptionsTable)
+        .set({ status: "failed", errorMessage, audioPath })
+        .where(eq(transcriptionsTable.id, recordId));
+    }
+  } finally {
+    await unlink(file.path).catch(() => {});
+  }
+}
+
+async function createTranscriptionFromDisk(file: DiskAudioUpload) {
+  try {
+    const [record] = await db
+      .insert(transcriptionsTable)
+      .values({
+        filename: file.originalname,
+        fileSize: file.size,
+        status: "processing",
+        text: "",
+        audioPath: null,
+      })
+      .returning();
+
+    void processDiskAudio(record.id, file).catch((err) => {
+      logger.error({ err, id: record.id }, "Background transcription processing failed");
+    });
+    return record;
+  } catch (err) {
+    await unlink(file.path).catch(() => {});
+    throw err;
+  }
+}
 
 router.get("/transcriptions", async (_req, res): Promise<void> => {
   const transcriptions = await db
@@ -75,105 +256,164 @@ router.post("/transcriptions", uploadSingleAudio, async (req, res): Promise<void
     return;
   }
 
-  let record;
-  try {
-    [record] = await db
-      .insert(transcriptionsTable)
-      .values({
-        filename: file.originalname,
-        fileSize: file.size,
-        status: "processing",
-        text: "",
-        audioPath: null,
-      })
-      .returning();
-  } catch (err) {
-    await unlink(file.path).catch(() => {});
-    throw err;
+  const record = await createTranscriptionFromDisk(file);
+  res.status(201).json(GetTranscriptionResponse.parse(record));
+});
+
+router.post("/transcriptions/upload-sessions", async (req, res): Promise<void> => {
+  const filename =
+    typeof req.body?.filename === "string" ? req.body.filename.trim() : "";
+  const mimetype =
+    typeof req.body?.mimetype === "string"
+      ? req.body.mimetype.trim()
+      : "application/octet-stream";
+  const totalSize = Number(req.body?.fileSize);
+
+  if (!filename || !Number.isInteger(totalSize) || totalSize <= 0) {
+    res.status(400).json({ error: "Filename and a positive file size are required." });
+    return;
+  }
+  if (totalSize > MAX_AUDIO_FILE_BYTES) {
+    res.status(413).json({ error: "Audio files must be smaller than 1 GB." });
+    return;
+  }
+  if (
+    !mimetype.startsWith("audio/") &&
+    !filename.match(/\.(mp3|wav|m4a|ogg|webm)$/i)
+  ) {
+    res.status(400).json({ error: "Unsupported audio file type." });
+    return;
   }
 
-  res.status(201).json(GetTranscriptionResponse.parse(record));
+  const id = randomUUID();
+  const session: UploadSession = {
+    id,
+    path: join(tmpdir(), `transcriber-session-${id}`),
+    filename,
+    mimetype,
+    totalSize,
+    receivedBytes: 0,
+    nextChunkIndex: 0,
+    updatedAt: Date.now(),
+  };
+  await writeFile(session.path, "");
+  uploadSessions.set(id, session);
 
-  const storageTask = (async (): Promise<string | null> => {
-    try {
-      const uploadURL = await objectStorage.getObjectEntityUploadURL();
-      const stream = createReadStream(file.path);
-      const putRes = await fetch(uploadURL, {
-        method: "PUT",
-        body: stream as unknown as RequestInit["body"],
-        headers: { "Content-Type": file.mimetype || "application/octet-stream" },
-        duplex: "half",
-      } as RequestInit & { duplex: "half" });
-      if (!putRes.ok) {
-        throw new Error(`Storage upload failed with status ${putRes.status}`);
-      }
-      return objectStorage.normalizeObjectEntityPath(uploadURL);
-    } catch (err) {
-      logger.error({ err, id: record.id }, "Failed to persist audio to object storage");
-      return null;
+  res.status(201).json({
+    id,
+    chunkSize: UPLOAD_CHUNK_BYTES,
+    receivedBytes: 0,
+    nextChunkIndex: 0,
+  });
+});
+
+router.post(
+  "/transcriptions/upload-sessions/:sessionId/chunks/:chunkIndex",
+  uploadSingleChunk,
+  async (req, res): Promise<void> => {
+    const chunk = req.file;
+    const session = uploadSessions.get(String(req.params.sessionId));
+    const chunkIndex = Number(req.params.chunkIndex);
+
+    if (!chunk) {
+      res.status(400).json({ error: "No upload chunk provided." });
+      return;
     }
-  })();
-
-  const transcriptionTask = transcribeAudioFile(file.path);
-
-  try {
-    const [storageResult, transcriptionResult] = await Promise.allSettled([
-      storageTask,
-      transcriptionTask,
-    ]);
-    const audioPath =
-      storageResult.status === "fulfilled" ? storageResult.value : null;
-
-    const [current] = await db
-      .select({ id: transcriptionsTable.id })
-      .from(transcriptionsTable)
-      .where(eq(transcriptionsTable.id, record.id));
-
-    if (!current) {
-      if (audioPath) {
-        try {
-          const orphan = await objectStorage.getObjectEntityFile(audioPath);
-          await orphan.delete();
-        } catch (cleanupErr) {
-          if (!(cleanupErr instanceof ObjectNotFoundError)) {
-            logger.error(
-              { err: cleanupErr, id: record.id },
-              "Failed to remove audio for a deleted transcription",
-            );
-          }
-        }
-      }
+    if (!session) {
+      await unlink(chunk.path).catch(() => {});
+      res.status(404).json({ error: "Upload session expired. Please retry the upload." });
+      return;
+    }
+    if (!Number.isInteger(chunkIndex) || chunkIndex < 0) {
+      await unlink(chunk.path).catch(() => {});
+      res.status(400).json({ error: "Invalid upload chunk number." });
+      return;
+    }
+    if (chunkIndex < session.nextChunkIndex) {
+      await unlink(chunk.path).catch(() => {});
+      res.json({
+        receivedBytes: session.receivedBytes,
+        nextChunkIndex: session.nextChunkIndex,
+      });
+      return;
+    }
+    if (chunkIndex !== session.nextChunkIndex) {
+      await unlink(chunk.path).catch(() => {});
+      res.status(409).json({
+        error: `Expected chunk ${session.nextChunkIndex}.`,
+        nextChunkIndex: session.nextChunkIndex,
+      });
       return;
     }
 
-    if (transcriptionResult.status === "fulfilled") {
-      await db
-        .update(transcriptionsTable)
-        .set({
-          text: transcriptionResult.value,
-          status: "completed",
-          errorMessage: null,
-          audioPath,
-        })
-        .where(eq(transcriptionsTable.id, record.id));
-    } else {
-      logger.error(
-        { err: transcriptionResult.reason, id: record.id },
-        "Transcription failed",
-      );
-      const errorMessage =
-        transcriptionResult.reason instanceof Error
-          ? transcriptionResult.reason.message
-          : "Unknown error";
-      await db
-        .update(transcriptionsTable)
-        .set({ status: "failed", errorMessage, audioPath })
-        .where(eq(transcriptionsTable.id, record.id));
+    const expectedSize = Math.min(
+      UPLOAD_CHUNK_BYTES,
+      session.totalSize - session.receivedBytes,
+    );
+    if (chunk.size !== expectedSize) {
+      await unlink(chunk.path).catch(() => {});
+      res.status(400).json({
+        error: `Invalid chunk size. Expected ${expectedSize} bytes.`,
+      });
+      return;
     }
-  } finally {
-    await unlink(file.path).catch(() => {});
-  }
-});
+
+    try {
+      await pipeline(
+        createReadStream(chunk.path),
+        createWriteStream(session.path, { flags: "a" }),
+      );
+    } finally {
+      await unlink(chunk.path).catch(() => {});
+    }
+
+    session.receivedBytes += chunk.size;
+    session.nextChunkIndex += 1;
+    session.updatedAt = Date.now();
+
+    res.json({
+      receivedBytes: session.receivedBytes,
+      nextChunkIndex: session.nextChunkIndex,
+    });
+  },
+);
+
+router.post(
+  "/transcriptions/upload-sessions/:sessionId/complete",
+  async (req, res): Promise<void> => {
+    const session = uploadSessions.get(String(req.params.sessionId));
+    if (!session) {
+      res.status(404).json({ error: "Upload session expired. Please retry the upload." });
+      return;
+    }
+    if (session.receivedBytes !== session.totalSize) {
+      res.status(409).json({
+        error: `Upload is incomplete: ${session.receivedBytes} of ${session.totalSize} bytes received.`,
+      });
+      return;
+    }
+
+    uploadSessions.delete(session.id);
+    const record = await createTranscriptionFromDisk({
+      path: session.path,
+      originalname: session.filename,
+      size: session.totalSize,
+      mimetype: session.mimetype,
+    });
+    res.status(201).json(GetTranscriptionResponse.parse(record));
+  },
+);
+
+router.delete(
+  "/transcriptions/upload-sessions/:sessionId",
+  async (req, res): Promise<void> => {
+    const session = uploadSessions.get(String(req.params.sessionId));
+    if (session) {
+      await removeUploadSession(session);
+    }
+    res.status(204).end();
+  },
+);
 
 router.post("/transcriptions/text", async (req, res): Promise<void> => {
   const body = ImportTranscriptionTextBody.safeParse(req.body);

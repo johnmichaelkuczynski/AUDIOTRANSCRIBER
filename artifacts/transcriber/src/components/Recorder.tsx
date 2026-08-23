@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
-  useCreateTranscription,
   getListTranscriptionsQueryKey,
   getGetTranscriptionStatsQueryKey,
 } from "@workspace/api-client-react";
@@ -11,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
+import { uploadAudioFileInChunks } from "@/lib/chunkedUpload";
 
 type RecorderState = "idle" | "recording" | "recorded";
 
@@ -50,6 +50,7 @@ export function Recorder() {
   const [autoTranscribe, setAutoTranscribe] = useState(true);
   const [elapsed, setElapsed] = useState(0);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -66,27 +67,6 @@ export function Recorder() {
   useEffect(() => {
     autoTranscribeRef.current = autoTranscribe;
   }, [autoTranscribe]);
-
-  const createTranscription = useCreateTranscription({
-    mutation: {
-      onSuccess: () => {
-        toast({
-          title: "Transcription started",
-          description: "Your recording is being processed. It will appear below shortly.",
-        });
-        queryClient.invalidateQueries({ queryKey: getListTranscriptionsQueryKey() });
-        queryClient.invalidateQueries({ queryKey: getGetTranscriptionStatsQueryKey() });
-        resetRecording();
-      },
-      onError: (err) => {
-        toast({
-          title: "Transcription failed",
-          description: err?.data?.error || "Could not transcribe the recording. Please try again.",
-          variant: "destructive",
-        });
-      },
-    },
-  });
 
   const stopTimer = useCallback(() => {
     if (timerRef.current) {
@@ -146,13 +126,34 @@ export function Recorder() {
   }, [stopTimer, releaseStream]);
 
   const transcribeBlob = useCallback(
-    (blob: Blob) => {
+    async (blob: Blob) => {
       const ext = extForMime(mimeRef.current || blob.type);
       const filename = `recording-${new Date().toISOString().replace(/[:.]/g, "-")}.${ext}`;
       const file = new File([blob], filename, { type: blob.type || mimeRef.current });
-      createTranscription.mutate({ data: { file } });
+      setUploadProgress(0);
+      try {
+        await uploadAudioFileInChunks(file, setUploadProgress);
+        toast({
+          title: "Transcription started",
+          description: "Two-minute intervals will appear below as each one finishes.",
+        });
+        queryClient.invalidateQueries({ queryKey: getListTranscriptionsQueryKey() });
+        queryClient.invalidateQueries({ queryKey: getGetTranscriptionStatsQueryKey() });
+        resetRecording();
+      } catch (err) {
+        toast({
+          title: "Transcription failed",
+          description:
+            err instanceof Error
+              ? err.message
+              : "Could not transcribe the recording. Please try again.",
+          variant: "destructive",
+        });
+      } finally {
+        setUploadProgress(null);
+      }
     },
-    [createTranscription],
+    [queryClient, resetRecording, toast],
   );
 
   const finalizeRecording = useCallback(() => {
@@ -290,7 +291,7 @@ export function Recorder() {
     transcribeBlob(blob);
   }, [transcribeBlob]);
 
-  const isUploading = createTranscription.isPending;
+  const isUploading = uploadProgress !== null;
 
   return (
     <div className="w-full rounded-xl border border-border bg-card p-6">
@@ -323,8 +324,16 @@ export function Recorder() {
       {isUploading ? (
         <div className="flex flex-col items-center justify-center py-8">
           <Loader2 className="w-10 h-10 text-primary animate-spin mb-3" />
-          <p className="font-medium text-foreground">Uploading & Processing</p>
-          <p className="text-sm text-muted-foreground mt-1">This might take a moment...</p>
+          <p className="font-medium text-foreground">Uploading {uploadProgress}%</p>
+          <div className="w-64 max-w-full h-2 rounded-full bg-muted mt-3 overflow-hidden">
+            <div
+              className="h-full bg-primary transition-all duration-300"
+              style={{ width: `${uploadProgress}%` }}
+            />
+          </div>
+          <p className="text-sm text-muted-foreground mt-2">
+            Sent in retryable 8 MB pieces
+          </p>
         </div>
       ) : state === "idle" ? (
         <button
