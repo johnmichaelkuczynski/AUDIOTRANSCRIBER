@@ -14,3 +14,10 @@ uri = "file://attached_assets/perfect-transcript-canonical-speakers.txt"
 type = "text"
 title = "Perfect Transcript — Canonical Speakers"
 description = "Exact 4,421-word output from the final 14-chunk in-app job. Verified with five canonical participant labels, zero generic or nested labels, authoritative Kuczynski spelling, and no one-letter name-ledger substitutions."
+
+[[outputs]]
+id = "Xi19WoCN-1tkv2kxrqvdw"
+uri = "file://attached_assets/recording-1-transcript.txt"
+type = "text"
+title = "Recording 1 — Timestamped Transcript"
+description = "Complete 34:32 hearing transcript with 18 verified intervals, speaker labels, timestamps, 5,887 words, and confirmed name-spelling corrections."
