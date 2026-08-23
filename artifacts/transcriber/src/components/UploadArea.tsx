@@ -68,6 +68,15 @@ export function UploadArea() {
       return;
     }
 
+    if (file.size > 1024 * 1024 * 1024) {
+      toast({
+        title: "File is too large",
+        description: "Please upload an audio file smaller than 1 GB.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     createTranscription.mutate({ data: { file } });
   };
 
@@ -113,7 +122,7 @@ export function UploadArea() {
             {isDragging ? "Drop audio file here" : "Click or drag to upload"}
           </p>
           <p className="text-sm text-muted-foreground max-w-xs text-center">
-            Supported formats: MP3, WAV, M4A, OGG
+            Supported formats: MP3, WAV, M4A, OGG · up to 1 GB
           </p>
         </div>
       )}

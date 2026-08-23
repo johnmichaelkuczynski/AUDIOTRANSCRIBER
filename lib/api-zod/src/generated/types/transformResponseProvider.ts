@@ -10,6 +10,7 @@ export type TransformResponseProvider =
   (typeof TransformResponseProvider)[keyof typeof TransformResponseProvider];
 
 export const TransformResponseProvider = {
+  openai: "openai",
   deepseek: "deepseek",
   anthropic: "anthropic",
   venice: "venice",

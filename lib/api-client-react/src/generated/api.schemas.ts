@@ -5,6 +5,125 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+export interface TranscriptTextInput {
+  /** @minLength 1 */
+  text: string;
+  /** @minLength 1 */
+  filename?: string;
+}
+
+export type CoherenceJobInputJobType =
+  (typeof CoherenceJobInputJobType)[keyof typeof CoherenceJobInputJobType];
+
+export const CoherenceJobInputJobType = {
+  polish: "polish",
+  play: "play",
+} as const;
+
+export type CoherenceJobInputFidelityMode =
+  (typeof CoherenceJobInputFidelityMode)[keyof typeof CoherenceJobInputFidelityMode];
+
+export const CoherenceJobInputFidelityMode = {
+  verbatim: "verbatim",
+  adaptive: "adaptive",
+  fictionalized: "fictionalized",
+} as const;
+
+export interface CoherenceJobInput {
+  jobType: CoherenceJobInputJobType;
+  manualSpecifications?: string;
+  /**
+   * @minimum 1
+   * @maximum 60000
+   */
+  targetWordCount?: number;
+  fidelityMode?: CoherenceJobInputFidelityMode;
+}
+
+export type CoherenceJobJobType =
+  (typeof CoherenceJobJobType)[keyof typeof CoherenceJobJobType];
+
+export const CoherenceJobJobType = {
+  polish: "polish",
+  play: "play",
+} as const;
+
+export type CoherenceJobFidelityMode =
+  (typeof CoherenceJobFidelityMode)[keyof typeof CoherenceJobFidelityMode];
+
+export const CoherenceJobFidelityMode = {
+  verbatim: "verbatim",
+  adaptive: "adaptive",
+  fictionalized: "fictionalized",
+} as const;
+
+export type CoherenceJobStatus =
+  (typeof CoherenceJobStatus)[keyof typeof CoherenceJobStatus];
+
+export const CoherenceJobStatus = {
+  pending: "pending",
+  skeleton_extraction: "skeleton_extraction",
+  chunk_processing: "chunk_processing",
+  stitching: "stitching",
+  complete: "complete",
+  failed: "failed",
+} as const;
+
+export interface CoherenceJob {
+  id: string;
+  transcriptionId: number;
+  jobType: CoherenceJobJobType;
+  fidelityMode: CoherenceJobFidelityMode;
+  status: CoherenceJobStatus;
+  progress: number;
+  currentChunk: number;
+  totalChunks: number;
+  targetWordCount: number;
+  /** @nullable */
+  finalOutput: string | null;
+  /** @nullable */
+  finalWordCount: number | null;
+  warnings: string[];
+  /** @nullable */
+  error: string | null;
+  createdAt: string;
+  updatedAt: string;
+  /** @nullable */
+  completedAt: string | null;
+}
+
+export type DiagnosticCheckStatus =
+  (typeof DiagnosticCheckStatus)[keyof typeof DiagnosticCheckStatus];
+
+export const DiagnosticCheckStatus = {
+  passed: "passed",
+  failed: "failed",
+} as const;
+
+export interface DiagnosticCheck {
+  name: string;
+  status: DiagnosticCheckStatus;
+  detail: string;
+  durationMs: number;
+}
+
+export type DiagnosticReportStatus =
+  (typeof DiagnosticReportStatus)[keyof typeof DiagnosticReportStatus];
+
+export const DiagnosticReportStatus = {
+  passed: "passed",
+  failed: "failed",
+} as const;
+
+export interface DiagnosticReport {
+  status: DiagnosticReportStatus;
+  provider: string;
+  model: string;
+  credentialSource: string;
+  generatedAt: string;
+  checks: DiagnosticCheck[];
+}
+
 export interface HealthStatus {
   status: string;
 }
@@ -45,6 +164,7 @@ export type TransformRequestMode =
 
 export const TransformRequestMode = {
   cleanup: "cleanup",
+  speakers: "speakers",
   rewrite: "rewrite",
 } as const;
 
@@ -52,6 +172,7 @@ export type TransformRequestProvider =
   (typeof TransformRequestProvider)[keyof typeof TransformRequestProvider];
 
 export const TransformRequestProvider = {
+  openai: "openai",
   deepseek: "deepseek",
   anthropic: "anthropic",
   venice: "venice",
@@ -69,6 +190,7 @@ export type TransformResponseMode =
 
 export const TransformResponseMode = {
   cleanup: "cleanup",
+  speakers: "speakers",
   rewrite: "rewrite",
 } as const;
 
@@ -76,6 +198,7 @@ export type TransformResponseProvider =
   (typeof TransformResponseProvider)[keyof typeof TransformResponseProvider];
 
 export const TransformResponseProvider = {
+  openai: "openai",
   deepseek: "deepseek",
   anthropic: "anthropic",
   venice: "venice",

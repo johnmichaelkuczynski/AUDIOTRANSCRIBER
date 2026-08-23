@@ -10,6 +10,7 @@ import { Loader2, Copy, Trash2, FileAudio, AlertCircle, Check, Play, Pause } fro
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { TransformPanel } from "./TransformPanel";
+import { CoherencePanel } from "./CoherencePanel";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -163,6 +164,16 @@ export function TranscriptionCard({ transcription }: TranscriptionCardProps) {
               {transcription.text}
             </p>
             <TransformPanel transcriptionId={transcription.id} />
+            <CoherencePanel transcriptionId={transcription.id} />
+          </div>
+        )}
+
+        {isCompleted && !transcription.text && (
+          <div className="mt-4 p-4 rounded-md bg-muted/20 border border-border/50 text-sm text-muted-foreground flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 shrink-0 text-muted-foreground/70" />
+            <span>
+              AI transcript perfection and play generation require transcript text. Import or transcribe audio to use these tools.
+            </span>
           </div>
         )}
       </CardContent>

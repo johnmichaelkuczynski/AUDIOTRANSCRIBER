@@ -9,6 +9,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/not-found";
 import Home from "@/pages/home";
+import Diagnostics from "@/pages/diagnostics";
 
 const queryClient = new QueryClient();
 
@@ -24,6 +25,7 @@ function App() {
             <Route path="/app">
               <Redirect to="/" />
             </Route>
+            <Route path="/diagnostics" component={Diagnostics} />
             <Route component={NotFound} />
           </Switch>
           <Toaster />

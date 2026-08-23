@@ -6,12 +6,24 @@
  * OpenAPI spec version: 0.1.0
  */
 
+export * from "./coherenceJob";
+export * from "./coherenceJobFidelityMode";
+export * from "./coherenceJobInput";
+export * from "./coherenceJobInputFidelityMode";
+export * from "./coherenceJobInputJobType";
+export * from "./coherenceJobJobType";
+export * from "./coherenceJobStatus";
 export * from "./createTranscriptionBody";
+export * from "./diagnosticCheck";
+export * from "./diagnosticCheckStatus";
+export * from "./diagnosticReport";
+export * from "./diagnosticReportStatus";
 export * from "./errorResponse";
 export * from "./healthStatus";
 export * from "./transcription";
 export * from "./transcriptionStats";
 export * from "./transcriptionStatus";
+export * from "./transcriptTextInput";
 export * from "./transformRequest";
 export * from "./transformRequestMode";
 export * from "./transformRequestProvider";

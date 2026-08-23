@@ -17,9 +17,13 @@ import type {
 } from "@tanstack/react-query";
 
 import type {
+  CoherenceJob,
+  CoherenceJobInput,
   CreateTranscriptionBody,
+  DiagnosticReport,
   ErrorResponse,
   HealthStatus,
+  TranscriptTextInput,
   Transcription,
   TranscriptionStats,
   TransformRequest,
@@ -275,6 +279,353 @@ export const useCreateTranscription = <
 > => {
   return useMutation(getCreateTranscriptionMutationOptions(options));
 };
+
+/**
+ * @summary Import a completed transcript without audio
+ */
+export const getImportTranscriptionTextUrl = () => {
+  return `/api/transcriptions/text`;
+};
+
+export const importTranscriptionText = async (
+  transcriptTextInput: TranscriptTextInput,
+  options?: RequestInit,
+): Promise<Transcription> => {
+  return customFetch<Transcription>(getImportTranscriptionTextUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(transcriptTextInput),
+  });
+};
+
+export const getImportTranscriptionTextMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof importTranscriptionText>>,
+    TError,
+    { data: BodyType<TranscriptTextInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof importTranscriptionText>>,
+  TError,
+  { data: BodyType<TranscriptTextInput> },
+  TContext
+> => {
+  const mutationKey = ["importTranscriptionText"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof importTranscriptionText>>,
+    { data: BodyType<TranscriptTextInput> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return importTranscriptionText(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ImportTranscriptionTextMutationResult = NonNullable<
+  Awaited<ReturnType<typeof importTranscriptionText>>
+>;
+export type ImportTranscriptionTextMutationBody = BodyType<TranscriptTextInput>;
+export type ImportTranscriptionTextMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Import a completed transcript without audio
+ */
+export const useImportTranscriptionText = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof importTranscriptionText>>,
+    TError,
+    { data: BodyType<TranscriptTextInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof importTranscriptionText>>,
+  TError,
+  { data: BodyType<TranscriptTextInput> },
+  TContext
+> => {
+  return useMutation(getImportTranscriptionTextMutationOptions(options));
+};
+
+/**
+ * @summary Start transcript perfection or transcript-to-play processing
+ */
+export const getCreateCoherenceJobUrl = (id: number) => {
+  return `/api/transcriptions/${id}/coherence-jobs`;
+};
+
+export const createCoherenceJob = async (
+  id: number,
+  coherenceJobInput: CoherenceJobInput,
+  options?: RequestInit,
+): Promise<CoherenceJob> => {
+  return customFetch<CoherenceJob>(getCreateCoherenceJobUrl(id), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(coherenceJobInput),
+  });
+};
+
+export const getCreateCoherenceJobMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createCoherenceJob>>,
+    TError,
+    { id: number; data: BodyType<CoherenceJobInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createCoherenceJob>>,
+  TError,
+  { id: number; data: BodyType<CoherenceJobInput> },
+  TContext
+> => {
+  const mutationKey = ["createCoherenceJob"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createCoherenceJob>>,
+    { id: number; data: BodyType<CoherenceJobInput> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return createCoherenceJob(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateCoherenceJobMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createCoherenceJob>>
+>;
+export type CreateCoherenceJobMutationBody = BodyType<CoherenceJobInput>;
+export type CreateCoherenceJobMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Start transcript perfection or transcript-to-play processing
+ */
+export const useCreateCoherenceJob = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createCoherenceJob>>,
+    TError,
+    { id: number; data: BodyType<CoherenceJobInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createCoherenceJob>>,
+  TError,
+  { id: number; data: BodyType<CoherenceJobInput> },
+  TContext
+> => {
+  return useMutation(getCreateCoherenceJobMutationOptions(options));
+};
+
+/**
+ * @summary List coherence jobs for a transcription
+ */
+export const getListCoherenceJobsUrl = (id: number) => {
+  return `/api/transcriptions/${id}/coherence-jobs`;
+};
+
+export const listCoherenceJobs = async (
+  id: number,
+  options?: RequestInit,
+): Promise<CoherenceJob[]> => {
+  return customFetch<CoherenceJob[]>(getListCoherenceJobsUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListCoherenceJobsQueryKey = (id: number) => {
+  return [`/api/transcriptions/${id}/coherence-jobs`] as const;
+};
+
+export const getListCoherenceJobsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listCoherenceJobs>>,
+  TError = ErrorType<unknown>,
+>(
+  id: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listCoherenceJobs>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListCoherenceJobsQueryKey(id);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listCoherenceJobs>>
+  > = ({ signal }) => listCoherenceJobs(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof listCoherenceJobs>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListCoherenceJobsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listCoherenceJobs>>
+>;
+export type ListCoherenceJobsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List coherence jobs for a transcription
+ */
+
+export function useListCoherenceJobs<
+  TData = Awaited<ReturnType<typeof listCoherenceJobs>>,
+  TError = ErrorType<unknown>,
+>(
+  id: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listCoherenceJobs>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListCoherenceJobsQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Poll a coherence job
+ */
+export const getGetCoherenceJobUrl = (id: string) => {
+  return `/api/coherence-jobs/${id}`;
+};
+
+export const getCoherenceJob = async (
+  id: string,
+  options?: RequestInit,
+): Promise<CoherenceJob> => {
+  return customFetch<CoherenceJob>(getGetCoherenceJobUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetCoherenceJobQueryKey = (id: string) => {
+  return [`/api/coherence-jobs/${id}`] as const;
+};
+
+export const getGetCoherenceJobQueryOptions = <
+  TData = Awaited<ReturnType<typeof getCoherenceJob>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getCoherenceJob>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetCoherenceJobQueryKey(id);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getCoherenceJob>>> = ({
+    signal,
+  }) => getCoherenceJob(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getCoherenceJob>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetCoherenceJobQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getCoherenceJob>>
+>;
+export type GetCoherenceJobQueryError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Poll a coherence job
+ */
+
+export function useGetCoherenceJob<
+  TData = Awaited<ReturnType<typeof getCoherenceJob>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getCoherenceJob>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetCoherenceJobQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
 
 /**
  * Returns a transcription by ID
@@ -546,10 +897,12 @@ export function useGetTranscriptionAudio<
 Modes:
   - `cleanup`: removes filler words ("um", "uh"), false starts and
     repetitions, lightly fixes grammar while preserving meaning.
+  - `speakers`: formats the transcript into readable dialogue with
+    consistent Speaker 1, Speaker 2, etc. labels without inventing names.
   - `rewrite`: rewrites the transcript according to the user's
     free-form instructions.
 
- * @summary Clean up or rewrite a transcription with an LLM
+ * @summary Clean up, speaker-format, or rewrite a transcription with an LLM
  */
 export const getTransformTranscriptionUrl = (id: number) => {
   return `/api/transcriptions/${id}/transform`;
@@ -613,7 +966,7 @@ export type TransformTranscriptionMutationBody = BodyType<TransformRequest>;
 export type TransformTranscriptionMutationError = ErrorType<ErrorResponse>;
 
 /**
- * @summary Clean up or rewrite a transcription with an LLM
+ * @summary Clean up, speaker-format, or rewrite a transcription with an LLM
  */
 export const useTransformTranscription = <
   TError = ErrorType<ErrorResponse>,
@@ -710,3 +1063,85 @@ export function useGetTranscriptionStats<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+/**
+ * Runs live checks for configuration, database, object storage, audio processing, and AI transcription.
+ * @summary Run end-to-end application diagnostics
+ */
+export const getRunDiagnosticsUrl = () => {
+  return `/api/diagnostics/run`;
+};
+
+export const runDiagnostics = async (
+  options?: RequestInit,
+): Promise<DiagnosticReport> => {
+  return customFetch<DiagnosticReport>(getRunDiagnosticsUrl(), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getRunDiagnosticsMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof runDiagnostics>>,
+    TError,
+    void,
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof runDiagnostics>>,
+  TError,
+  void,
+  TContext
+> => {
+  const mutationKey = ["runDiagnostics"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof runDiagnostics>>,
+    void
+  > = () => {
+    return runDiagnostics(requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type RunDiagnosticsMutationResult = NonNullable<
+  Awaited<ReturnType<typeof runDiagnostics>>
+>;
+
+export type RunDiagnosticsMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Run end-to-end application diagnostics
+ */
+export const useRunDiagnostics = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof runDiagnostics>>,
+    TError,
+    void,
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof runDiagnostics>>,
+  TError,
+  void,
+  TContext
+> => {
+  return useMutation(getRunDiagnosticsMutationOptions(options));
+};

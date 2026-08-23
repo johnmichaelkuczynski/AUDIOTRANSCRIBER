@@ -1,8 +1,8 @@
 import OpenAI from "openai";
 import Anthropic from "@anthropic-ai/sdk";
 
-export type Provider = "deepseek" | "anthropic" | "venice";
-export type Mode = "cleanup" | "rewrite";
+export type Provider = "openai" | "deepseek" | "anthropic" | "venice";
+export type Mode = "cleanup" | "speakers" | "rewrite";
 
 const CLEANUP_SYSTEM_PROMPT = `You are a transcript cleanup assistant. You receive a verbatim audio transcript and return a cleaned version. Your rules:
 
@@ -20,25 +20,46 @@ const REWRITE_SYSTEM_PROMPT = `You are a rewriting assistant. You receive an aud
 - Preserve the underlying factual content (who said what, what happened) unless the instructions explicitly direct otherwise.
 - Output ONLY the rewritten text. No preamble, no explanations, no meta-commentary, no markdown headers.`;
 
+const SPEAKERS_SYSTEM_PROMPT = `You are a professional transcript editor. Convert the raw transcript into a polished, speaker-labeled transcript.
+
+Rules:
+- Infer speaker turns from questions, answers, wording, and conversational context.
+- Label speakers consistently as "Speaker 1", "Speaker 2", and so on.
+- If a person's name or role is explicitly and unambiguously stated in the transcript, include it after the generic label, for example "Speaker 1 (Jordan)". Never invent a name or identity.
+- Put every turn on its own paragraph using exactly this format: "Speaker 1: Spoken text"
+- Remove filler words, stutters, false starts, and immediate repetitions.
+- Add punctuation and paragraph breaks for readability.
+- Preserve every substantive statement, meaning, and claim. Do not summarize, omit content, add facts, or editorialize.
+- If only one speaker is evident, use "Speaker 1" throughout.
+- Output ONLY the formatted transcript. No preamble, explanation, markdown heading, or code fence.`;
+
 function buildUserMessage(mode: Mode, transcript: string, instructions: string | undefined): string {
   if (mode === "cleanup") {
     return `Clean up this transcript:\n\n${transcript}`;
+  }
+  if (mode === "speakers") {
+    return `Format this transcript with consistent speaker labels:\n\n${transcript}`;
   }
   return `Rewriting instructions:\n${instructions ?? ""}\n\n---\n\nTranscript to rewrite:\n\n${transcript}`;
 }
 
 function systemPromptFor(mode: Mode): string {
-  return mode === "cleanup" ? CLEANUP_SYSTEM_PROMPT : REWRITE_SYSTEM_PROMPT;
+  if (mode === "cleanup") return CLEANUP_SYSTEM_PROMPT;
+  if (mode === "speakers") return SPEAKERS_SYSTEM_PROMPT;
+  return REWRITE_SYSTEM_PROMPT;
 }
 
 async function runOpenAICompatible(args: {
   apiKey: string;
-  baseURL: string;
+  baseURL?: string;
   model: string;
   system: string;
   user: string;
 }): Promise<string> {
-  const client = new OpenAI({ apiKey: args.apiKey, baseURL: args.baseURL });
+  const client = new OpenAI({
+    apiKey: args.apiKey,
+    ...(args.baseURL ? { baseURL: args.baseURL } : {}),
+  });
   const completion = await client.chat.completions.create({
     model: args.model,
     messages: [
@@ -81,6 +102,16 @@ export async function transformTranscript(args: {
   const user = buildUserMessage(args.mode, args.transcript, args.instructions);
 
   switch (args.provider) {
+    case "openai": {
+      const apiKey = process.env.OPENAI_API_KEY;
+      if (!apiKey) throw new Error("OPENAI_API_KEY is not set");
+      return runOpenAICompatible({
+        apiKey,
+        model: "gpt-4o-mini",
+        system,
+        user,
+      });
+    }
     case "deepseek": {
       const apiKey = process.env.DEEPSEEK_API_KEY;
       if (!apiKey) throw new Error("DEEPSEEK_API_KEY is not set");

@@ -2,3 +2,5 @@
 - [Auth requires per-user data scoping](auth-user-scoping.md) — gating routes behind requireAuth isn't enough; add userId column + WHERE-scope every query or you ship an IDOR.
 - [Deploy crash-loop diagnosis](deploy-crashloop-diagnosis.md) — healthcheck 500 + "port never opened detected=0" = app throws at startup (usually missing AI integration env), not a build/.cjs path mismatch.
 - [Clerk prod publish provisioning](clerk-prod-publish-provisioning.md) — managed-Clerk "failed to publish" with build OK = proxy-health 404; live keys/proxy finalized at publish, just re-publish.
+- [Direct transcription credentials](direct-transcription-credentials.md) — transcription must use the direct OpenAI API key; do not reintroduce Replit AI Integrations.
+- [Neon and speaker diarization](neon-speaker-diarization.md) — prefer NEON_DATABASE_API and require true AssemblyAI utterance-level speaker labels for transcription.

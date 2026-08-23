@@ -49,6 +49,111 @@ export const CreateTranscriptionBody = zod.object({
 });
 
 /**
+ * @summary Import a completed transcript without audio
+ */
+
+export const ImportTranscriptionTextBody = zod.object({
+  text: zod.string().min(1),
+  filename: zod.string().min(1).optional(),
+});
+
+/**
+ * @summary Start transcript perfection or transcript-to-play processing
+ */
+export const CreateCoherenceJobParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const createCoherenceJobBodyManualSpecificationsDefault = ``;
+export const createCoherenceJobBodyTargetWordCountMax = 60000;
+
+export const createCoherenceJobBodyFidelityModeDefault = `adaptive`;
+
+export const CreateCoherenceJobBody = zod.object({
+  jobType: zod.enum(["polish", "play"]),
+  manualSpecifications: zod
+    .string()
+    .default(createCoherenceJobBodyManualSpecificationsDefault),
+  targetWordCount: zod
+    .number()
+    .min(1)
+    .max(createCoherenceJobBodyTargetWordCountMax)
+    .optional(),
+  fidelityMode: zod
+    .enum(["verbatim", "adaptive", "fictionalized"])
+    .default(createCoherenceJobBodyFidelityModeDefault),
+});
+
+/**
+ * @summary List coherence jobs for a transcription
+ */
+export const ListCoherenceJobsParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const ListCoherenceJobsResponseItem = zod.object({
+  id: zod.string().uuid(),
+  transcriptionId: zod.number(),
+  jobType: zod.enum(["polish", "play"]),
+  fidelityMode: zod.enum(["verbatim", "adaptive", "fictionalized"]),
+  status: zod.enum([
+    "pending",
+    "skeleton_extraction",
+    "chunk_processing",
+    "stitching",
+    "complete",
+    "failed",
+  ]),
+  progress: zod.number(),
+  currentChunk: zod.number(),
+  totalChunks: zod.number(),
+  targetWordCount: zod.number(),
+  finalOutput: zod.string().nullable(),
+  finalWordCount: zod.number().nullable(),
+  warnings: zod.array(zod.string()),
+  error: zod.string().nullable(),
+  createdAt: zod.coerce.date(),
+  updatedAt: zod.coerce.date(),
+  completedAt: zod.coerce.date().nullable(),
+});
+export const ListCoherenceJobsResponse = zod.array(
+  ListCoherenceJobsResponseItem,
+);
+
+/**
+ * @summary Poll a coherence job
+ */
+export const GetCoherenceJobParams = zod.object({
+  id: zod.coerce.string().uuid(),
+});
+
+export const GetCoherenceJobResponse = zod.object({
+  id: zod.string().uuid(),
+  transcriptionId: zod.number(),
+  jobType: zod.enum(["polish", "play"]),
+  fidelityMode: zod.enum(["verbatim", "adaptive", "fictionalized"]),
+  status: zod.enum([
+    "pending",
+    "skeleton_extraction",
+    "chunk_processing",
+    "stitching",
+    "complete",
+    "failed",
+  ]),
+  progress: zod.number(),
+  currentChunk: zod.number(),
+  totalChunks: zod.number(),
+  targetWordCount: zod.number(),
+  finalOutput: zod.string().nullable(),
+  finalWordCount: zod.number().nullable(),
+  warnings: zod.array(zod.string()),
+  error: zod.string().nullable(),
+  createdAt: zod.coerce.date(),
+  updatedAt: zod.coerce.date(),
+  completedAt: zod.coerce.date().nullable(),
+});
+
+/**
  * Returns a transcription by ID
  * @summary Get a single transcription
  */
@@ -96,18 +201,20 @@ export const GetTranscriptionAudioParams = zod.object({
 Modes:
   - `cleanup`: removes filler words ("um", "uh"), false starts and
     repetitions, lightly fixes grammar while preserving meaning.
+  - `speakers`: formats the transcript into readable dialogue with
+    consistent Speaker 1, Speaker 2, etc. labels without inventing names.
   - `rewrite`: rewrites the transcript according to the user's
     free-form instructions.
 
- * @summary Clean up or rewrite a transcription with an LLM
+ * @summary Clean up, speaker-format, or rewrite a transcription with an LLM
  */
 export const TransformTranscriptionParams = zod.object({
   id: zod.coerce.number(),
 });
 
 export const TransformTranscriptionBody = zod.object({
-  mode: zod.enum(["cleanup", "rewrite"]),
-  provider: zod.enum(["deepseek", "anthropic", "venice"]),
+  mode: zod.enum(["cleanup", "speakers", "rewrite"]),
+  provider: zod.enum(["openai", "deepseek", "anthropic", "venice"]),
   instructions: zod
     .string()
     .optional()
@@ -118,8 +225,8 @@ export const TransformTranscriptionBody = zod.object({
 
 export const TransformTranscriptionResponse = zod.object({
   text: zod.string(),
-  mode: zod.enum(["cleanup", "rewrite"]),
-  provider: zod.enum(["deepseek", "anthropic", "venice"]),
+  mode: zod.enum(["cleanup", "speakers", "rewrite"]),
+  provider: zod.enum(["openai", "deepseek", "anthropic", "venice"]),
 });
 
 /**
@@ -130,4 +237,24 @@ export const GetTranscriptionStatsResponse = zod.object({
   totalCount: zod.number(),
   completedCount: zod.number(),
   totalFileSize: zod.number(),
+});
+
+/**
+ * Runs live checks for configuration, database, object storage, audio processing, and AI transcription.
+ * @summary Run end-to-end application diagnostics
+ */
+export const RunDiagnosticsResponse = zod.object({
+  status: zod.enum(["passed", "failed"]),
+  provider: zod.string(),
+  model: zod.string(),
+  credentialSource: zod.string(),
+  generatedAt: zod.coerce.date(),
+  checks: zod.array(
+    zod.object({
+      name: zod.string(),
+      status: zod.enum(["passed", "failed"]),
+      detail: zod.string(),
+      durationMs: zod.number(),
+    }),
+  ),
 });

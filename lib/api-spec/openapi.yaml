@@ -72,6 +72,110 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+  /transcriptions/text:
+    post:
+      operationId: importTranscriptionText
+      tags: [transcriptions]
+      summary: Import a completed transcript without audio
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TranscriptTextInput"
+      responses:
+        "201":
+          description: Transcript imported
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Transcription"
+        "400":
+          description: Invalid transcript
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /transcriptions/{id}/coherence-jobs:
+    post:
+      operationId: createCoherenceJob
+      tags: [transcriptions]
+      summary: Start transcript perfection or transcript-to-play processing
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CoherenceJobInput"
+      responses:
+        "202":
+          description: Job accepted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CoherenceJob"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Transcription not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    get:
+      operationId: listCoherenceJobs
+      tags: [transcriptions]
+      summary: List coherence jobs for a transcription
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Coherence jobs
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/CoherenceJob"
+  /coherence-jobs/{id}:
+    get:
+      operationId: getCoherenceJob
+      tags: [transcriptions]
+      summary: Poll a coherence job
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Coherence job
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CoherenceJob"
+        "404":
+          description: Job not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
   /transcriptions/{id}:
     get:
       operationId: getTranscription
@@ -157,12 +261,14 @@ paths:
     post:
       operationId: transformTranscription
       tags: [transcriptions]
-      summary: Clean up or rewrite a transcription with an LLM
+      summary: Clean up, speaker-format, or rewrite a transcription with an LLM
       description: |
         Runs the completed transcription text through a chosen LLM provider.
         Modes:
           - `cleanup`: removes filler words ("um", "uh"), false starts and
             repetitions, lightly fixes grammar while preserving meaning.
+          - `speakers`: formats the transcript into readable dialogue with
+            consistent Speaker 1, Speaker 2, etc. labels without inventing names.
           - `rewrite`: rewrites the transcript according to the user's
             free-form instructions.
       parameters:
@@ -209,8 +315,137 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/TranscriptionStats"
+  /diagnostics/run:
+    post:
+      operationId: runDiagnostics
+      tags: [diagnostics]
+      summary: Run end-to-end application diagnostics
+      description: Runs live checks for configuration, database, object storage, audio processing, and AI transcription.
+      responses:
+        "200":
+          description: Diagnostic report
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DiagnosticReport"
 components:
   schemas:
+    TranscriptTextInput:
+      type: object
+      properties:
+        text:
+          type: string
+          minLength: 1
+        filename:
+          type: string
+          minLength: 1
+      required: [text]
+    CoherenceJobInput:
+      type: object
+      properties:
+        jobType:
+          type: string
+          enum: [polish, play]
+        manualSpecifications:
+          type: string
+          default: ""
+        targetWordCount:
+          type: integer
+          minimum: 1
+          maximum: 60000
+        fidelityMode:
+          type: string
+          enum: [verbatim, adaptive, fictionalized]
+          default: adaptive
+      required: [jobType]
+    CoherenceJob:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        transcriptionId:
+          type: integer
+        jobType:
+          type: string
+          enum: [polish, play]
+        fidelityMode:
+          type: string
+          enum: [verbatim, adaptive, fictionalized]
+        status:
+          type: string
+          enum: [pending, skeleton_extraction, chunk_processing, stitching, complete, failed]
+        progress:
+          type: integer
+        currentChunk:
+          type: integer
+        totalChunks:
+          type: integer
+        targetWordCount:
+          type: integer
+        finalOutput:
+          type: ["string", "null"]
+        finalWordCount:
+          type: ["integer", "null"]
+        warnings:
+          type: array
+          items:
+            type: string
+        error:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        completedAt:
+          type: ["string", "null"]
+          format: date-time
+      required: [id, transcriptionId, jobType, fidelityMode, status, progress, currentChunk, totalChunks, targetWordCount, finalOutput, finalWordCount, warnings, error, createdAt, updatedAt, completedAt]
+    DiagnosticCheck:
+      type: object
+      properties:
+        name:
+          type: string
+        status:
+          type: string
+          enum: [passed, failed]
+        detail:
+          type: string
+        durationMs:
+          type: integer
+      required:
+        - name
+        - status
+        - detail
+        - durationMs
+    DiagnosticReport:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [passed, failed]
+        provider:
+          type: string
+        model:
+          type: string
+        credentialSource:
+          type: string
+        generatedAt:
+          type: string
+          format: date-time
+        checks:
+          type: array
+          items:
+            $ref: "#/components/schemas/DiagnosticCheck"
+      required:
+        - status
+        - provider
+        - model
+        - credentialSource
+        - generatedAt
+        - checks
     HealthStatus:
       type: object
       properties:
@@ -267,10 +502,10 @@ components:
       properties:
         mode:
           type: string
-          enum: [cleanup, rewrite]
+          enum: [cleanup, speakers, rewrite]
         provider:
           type: string
-          enum: [deepseek, anthropic, venice]
+          enum: [openai, deepseek, anthropic, venice]
         instructions:
           type: string
           description: Required when mode is "rewrite". Free-form rewrite directions.
@@ -284,10 +519,10 @@ components:
           type: string
         mode:
           type: string
-          enum: [cleanup, rewrite]
+          enum: [cleanup, speakers, rewrite]
         provider:
           type: string
-          enum: [deepseek, anthropic, venice]
+          enum: [openai, deepseek, anthropic, venice]
       required:
         - text
         - mode

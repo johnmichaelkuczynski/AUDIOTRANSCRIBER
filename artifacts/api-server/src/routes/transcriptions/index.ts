@@ -1,8 +1,11 @@
-import { Router, type IRouter } from "express";
+import { Router, type IRouter, type RequestHandler } from "express";
 import multer from "multer";
+import { createReadStream } from "node:fs";
+import { unlink } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { randomUUID } from "node:crypto";
 import { eq, sql, count } from "drizzle-orm";
-import { db, transcriptionsTable } from "@workspace/db";
-import { speechToText, ensureCompatibleFormat } from "@workspace/integrations-openai-ai-server/audio";
+import { db, reconstructionJobsTable, transcriptionsTable } from "@workspace/db";
 import {
   GetTranscriptionParams,
   GetTranscriptionResponse,
@@ -12,19 +15,48 @@ import {
   TransformTranscriptionParams,
   TransformTranscriptionBody,
   TransformTranscriptionResponse,
+  ImportTranscriptionTextBody,
+  CreateCoherenceJobParams,
+  CreateCoherenceJobBody,
+  ListCoherenceJobsParams,
+  ListCoherenceJobsResponse,
+  GetCoherenceJobParams,
+  GetCoherenceJobResponse,
 } from "@workspace/api-zod";
 import { logger } from "../../lib/logger";
 import { transformTranscript } from "../../lib/llm";
 import { ObjectStorageService, ObjectNotFoundError } from "../../lib/objectStorage";
+import { transcribeAudioFile } from "../../lib/transcription";
+import { countWords, createPersistedCoherenceJob, enqueueCoherenceJob } from "../../lib/coherenceEngine";
 
 const router: IRouter = Router();
 
 const objectStorage = new ObjectStorageService();
 
 const upload = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: 50 * 1024 * 1024 },
+  storage: multer.diskStorage({
+    destination: tmpdir(),
+    filename: (_req, _file, callback) => {
+      callback(null, `transcriber-upload-${randomUUID()}`);
+    },
+  }),
+  limits: { fileSize: 1024 * 1024 * 1024 },
 });
+
+const uploadSingleAudio: RequestHandler = (req, res, next) => {
+  upload.single("file")(req, res, (err) => {
+    if (err instanceof multer.MulterError && err.code === "LIMIT_FILE_SIZE") {
+      res.status(413).json({ error: "Audio files must be smaller than 1 GB." });
+      return;
+    }
+    if (err) {
+      req.log.error({ err }, "Audio upload failed");
+      res.status(400).json({ error: "The audio file could not be uploaded." });
+      return;
+    }
+    next();
+  });
+};
 
 router.get("/transcriptions", async (_req, res): Promise<void> => {
   const transcriptions = await db
@@ -36,7 +68,7 @@ router.get("/transcriptions", async (_req, res): Promise<void> => {
   res.json(parsed);
 });
 
-router.post("/transcriptions", upload.single("file"), async (req, res): Promise<void> => {
+router.post("/transcriptions", uploadSingleAudio, async (req, res): Promise<void> => {
   const file = req.file;
   if (!file) {
     res.status(400).json({ error: "No audio file provided" });
@@ -46,11 +78,13 @@ router.post("/transcriptions", upload.single("file"), async (req, res): Promise<
   let audioPath: string | null = null;
   try {
     const uploadURL = await objectStorage.getObjectEntityUploadURL();
+    const stream = createReadStream(file.path);
     const putRes = await fetch(uploadURL, {
       method: "PUT",
-      body: new Uint8Array(file.buffer),
+      body: stream as unknown as RequestInit["body"],
       headers: { "Content-Type": file.mimetype || "application/octet-stream" },
-    });
+      duplex: "half",
+    } as RequestInit & { duplex: "half" });
     if (!putRes.ok) {
       throw new Error(`Storage upload failed with status ${putRes.status}`);
     }
@@ -82,15 +116,14 @@ router.post("/transcriptions", upload.single("file"), async (req, res): Promise<
         }
       }
     }
+    await unlink(file.path).catch(() => {});
     throw err;
   }
 
   res.status(201).json(GetTranscriptionResponse.parse(record));
 
   try {
-    const audioBuffer = Buffer.from(file.buffer);
-    const { buffer, format } = await ensureCompatibleFormat(audioBuffer);
-    const transcribedText = await speechToText(buffer, format);
+    const transcribedText = await transcribeAudioFile(file.path);
 
     await db
       .update(transcriptionsTable)
@@ -103,7 +136,99 @@ router.post("/transcriptions", upload.single("file"), async (req, res): Promise<
       .update(transcriptionsTable)
       .set({ status: "failed", errorMessage })
       .where(eq(transcriptionsTable.id, record.id));
+  } finally {
+    await unlink(file.path).catch(() => {});
   }
+});
+
+router.post("/transcriptions/text", async (req, res): Promise<void> => {
+  const body = ImportTranscriptionTextBody.safeParse(req.body);
+  if (!body.success) {
+    res.status(400).json({ error: body.error.message });
+    return;
+  }
+  const text = body.data.text.trim();
+  if (!text) {
+    res.status(400).json({ error: "Transcript text must not be blank" });
+    return;
+  }
+  const [record] = await db.insert(transcriptionsTable).values({
+    filename: body.data.filename ?? "Manual transcript.txt",
+    fileSize: Buffer.byteLength(text, "utf8"),
+    text,
+    status: "completed",
+    audioPath: null,
+  }).returning();
+  res.status(201).json(GetTranscriptionResponse.parse(record));
+});
+
+router.post("/transcriptions/:id/coherence-jobs", async (req, res): Promise<void> => {
+  const params = CreateCoherenceJobParams.safeParse(req.params);
+  const body = CreateCoherenceJobBody.safeParse(req.body);
+  if (!params.success || !body.success) {
+    res.status(400).json({ error: !params.success ? params.error.message : body.error!.message });
+    return;
+  }
+  const [transcription] = await db.select().from(transcriptionsTable).where(eq(transcriptionsTable.id, params.data.id));
+  if (!transcription) {
+    res.status(404).json({ error: "Transcription not found" });
+    return;
+  }
+  if (transcription.status !== "completed" || !transcription.text.trim()) {
+    res.status(400).json({ error: "Transcription is not completed yet" });
+    return;
+  }
+  const [activity] = await db
+    .select({
+      activeCount: sql<number>`count(*) filter (
+        where ${reconstructionJobsTable.status} not in ('complete', 'failed')
+      )`,
+    })
+    .from(reconstructionJobsTable);
+  if (Number(activity?.activeCount ?? 0) >= 3) {
+    res.status(429).json({
+      error: "Three long-form jobs are already active; wait for one to finish",
+    });
+    return;
+  }
+  const sourceWords = countWords(transcription.text);
+  const targetWordCount = body.data.targetWordCount ?? sourceWords;
+  const job = await createPersistedCoherenceJob({
+    transcriptionId: transcription.id,
+    text: transcription.text,
+    jobType: body.data.jobType,
+    manualSpecifications: body.data.manualSpecifications,
+    targetWordCount,
+    fidelityMode: body.data.fidelityMode,
+  });
+  res.status(202).json(GetCoherenceJobResponse.parse(job));
+  enqueueCoherenceJob(job.id);
+});
+
+router.get("/transcriptions/:id/coherence-jobs", async (req, res): Promise<void> => {
+  const params = ListCoherenceJobsParams.safeParse(req.params);
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+  const jobs = await db.select().from(reconstructionJobsTable)
+    .where(eq(reconstructionJobsTable.transcriptionId, params.data.id))
+    .orderBy(sql`${reconstructionJobsTable.createdAt} DESC`);
+  res.json(ListCoherenceJobsResponse.parse(jobs));
+});
+
+router.get("/coherence-jobs/:id", async (req, res): Promise<void> => {
+  const params = GetCoherenceJobParams.safeParse(req.params);
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+  const [job] = await db.select().from(reconstructionJobsTable).where(eq(reconstructionJobsTable.id, params.data.id));
+  if (!job) {
+    res.status(404).json({ error: "Coherence job not found" });
+    return;
+  }
+  res.json(GetCoherenceJobResponse.parse(job));
 });
 
 router.post("/transcriptions/:id/transform", async (req, res): Promise<void> => {

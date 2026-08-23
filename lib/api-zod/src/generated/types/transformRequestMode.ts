@@ -11,5 +11,6 @@ export type TransformRequestMode =
 
 export const TransformRequestMode = {
   cleanup: "cleanup",
+  speakers: "speakers",
   rewrite: "rewrite",
 } as const;

@@ -3,6 +3,7 @@ import { Recorder } from "@/components/Recorder";
 import { TranscriptionList } from "@/components/TranscriptionList";
 import { StatsSummary } from "@/components/StatsSummary";
 import { AppHeader } from "@/components/AppHeader";
+import { ImportTranscriptPanel } from "@/components/ImportTranscriptPanel";
 
 export default function Home() {
   return (
@@ -25,7 +26,15 @@ export default function Home() {
             <Recorder />
           </section>
 
-          <section className="space-y-6">
+          <section className="space-y-4 pt-6 border-t border-border/50">
+            <div className="space-y-1">
+              <h2 className="text-2xl font-bold tracking-tight text-foreground">Import Transcript</h2>
+              <p className="text-muted-foreground">Already have a transcript? Paste it here to use the AI tools without uploading audio.</p>
+            </div>
+            <ImportTranscriptPanel />
+          </section>
+
+          <section className="space-y-6 pt-6 border-t border-border/50">
             <div className="space-y-1">
               <h2 className="text-2xl font-bold tracking-tight text-foreground">Activity</h2>
               <p className="text-muted-foreground">Your recent transcriptions and statistics.</p>

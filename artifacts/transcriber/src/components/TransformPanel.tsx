@@ -10,18 +10,19 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Loader2, Sparkles, Wand2, Copy, Check, AlertCircle } from "lucide-react";
+import { Loader2, Sparkles, Wand2, Copy, Check, AlertCircle, Users } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 
-type Provider = "deepseek" | "anthropic" | "venice";
-type Mode = "cleanup" | "rewrite";
+type Provider = "openai" | "deepseek" | "anthropic" | "venice";
+type Mode = "cleanup" | "speakers" | "rewrite";
 
 interface TransformPanelProps {
   transcriptionId: number;
 }
 
 const PROVIDER_LABEL: Record<Provider, string> = {
+  openai: "OpenAI",
   deepseek: "DeepSeek",
   anthropic: "Anthropic Claude",
   venice: "Venice AI",
@@ -29,7 +30,7 @@ const PROVIDER_LABEL: Record<Provider, string> = {
 
 export function TransformPanel({ transcriptionId }: TransformPanelProps) {
   const { toast } = useToast();
-  const [provider, setProvider] = useState<Provider>("anthropic");
+  const [provider, setProvider] = useState<Provider>("openai");
   const [instructions, setInstructions] = useState("");
   const [result, setResult] = useState<{ text: string; mode: Mode; provider: Provider } | null>(null);
   const [copied, setCopied] = useState(false);
@@ -77,6 +78,8 @@ export function TransformPanel({ transcriptionId }: TransformPanelProps) {
   };
 
   const isCleaning = transformMutation.isPending && activeMode === "cleanup";
+  const isFormattingSpeakers =
+    transformMutation.isPending && activeMode === "speakers";
   const isRewriting = transformMutation.isPending && activeMode === "rewrite";
   const busy = transformMutation.isPending;
 
@@ -96,6 +99,7 @@ export function TransformPanel({ transcriptionId }: TransformPanelProps) {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
+              <SelectItem value="openai">{PROVIDER_LABEL.openai}</SelectItem>
               <SelectItem value="anthropic">{PROVIDER_LABEL.anthropic}</SelectItem>
               <SelectItem value="deepseek">{PROVIDER_LABEL.deepseek}</SelectItem>
               <SelectItem value="venice">{PROVIDER_LABEL.venice}</SelectItem>
@@ -114,6 +118,20 @@ export function TransformPanel({ transcriptionId }: TransformPanelProps) {
         >
           {isCleaning ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
           Clean up (remove fillers & repetitions)
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => runTransform("speakers")}
+          disabled={busy}
+          className="gap-2"
+        >
+          {isFormattingSpeakers ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <Users className="h-4 w-4" />
+          )}
+          Format with speaker labels
         </Button>
       </div>
 
@@ -147,7 +165,12 @@ export function TransformPanel({ transcriptionId }: TransformPanelProps) {
         <div className="space-y-2">
           <div className="flex items-center justify-between">
             <div className="text-xs font-medium text-muted-foreground">
-              {result.mode === "cleanup" ? "Cleaned transcript" : "Rewritten transcript"} ·{" "}
+              {result.mode === "cleanup"
+                ? "Cleaned transcript"
+                : result.mode === "speakers"
+                  ? "Speaker-formatted transcript"
+                  : "Rewritten transcript"}{" "}
+              ·{" "}
               <span className="text-foreground">{PROVIDER_LABEL[result.provider]}</span>
             </div>
             <Button

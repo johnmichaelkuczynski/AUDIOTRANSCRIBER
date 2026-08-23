@@ -5,11 +5,13 @@ import * as schema from "./schema";
 const { Pool } = pg;
 
 const connectionString =
-  process.env.NEON_DATABASE_URL ?? process.env.DATABASE_URL;
+  process.env.NEON_DATABASE_API ??
+  process.env.NEON_DATABASE_URL ??
+  process.env.DATABASE_URL;
 
 if (!connectionString) {
   throw new Error(
-    "NEON_DATABASE_URL (or DATABASE_URL) must be set. Did you forget to provision a database?",
+    "NEON_DATABASE_API, NEON_DATABASE_URL, or DATABASE_URL must be set. Did you forget to provision a database?",
   );
 }
 
