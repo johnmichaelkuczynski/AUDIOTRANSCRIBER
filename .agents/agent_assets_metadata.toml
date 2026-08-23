@@ -1,0 +1,9 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "RUWLq0YlrDW4gNz27HcwB"
+uri = "file://attached_assets/transcript-polish-corrected-verified.txt"
+type = "text"
+title = "Verified Perfect Transcript"
+description = "Exact 4,439-word legal transcript produced by the final 14-chunk in-app job and independently checked for fillers, repetitions, speaker drift, canonical names, legal terms, and typography."

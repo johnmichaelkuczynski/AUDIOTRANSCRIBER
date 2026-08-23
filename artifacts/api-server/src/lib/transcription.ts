@@ -135,6 +135,7 @@ async function pollTranscript(
 
 function formatSpeakerTranscript(
   transcript: AssemblyAITranscriptResponse,
+  offsetMilliseconds = 0,
 ): string {
   const utterances = transcript.utterances ?? [];
   if (utterances.length === 0) {
@@ -146,20 +147,31 @@ function formatSpeakerTranscript(
   return utterances
     .map((utterance) => {
       const speaker = utterance.speaker.trim() || "Unknown";
-      return `Speaker ${speaker}: ${utterance.text.trim()}`;
+      const totalSeconds = Math.max(
+        0,
+        Math.floor((offsetMilliseconds + utterance.start) / 1000),
+      );
+      const hours = Math.floor(totalSeconds / 3600);
+      const minutes = Math.floor((totalSeconds % 3600) / 60);
+      const seconds = totalSeconds % 60;
+      const timestamp = [hours, minutes, seconds]
+        .map((part) => String(part).padStart(2, "0"))
+        .join(":");
+      return `[${timestamp}] Speaker ${speaker}: ${utterance.text.trim()}`;
     })
-    .filter((line) => !line.endsWith(":"))
+    .filter((line) => !line.endsWith(": "))
     .join("\n\n");
 }
 
 async function transcribeSingleAudioFile(
   inputPath: string,
   apiKey: string,
+  offsetMilliseconds = 0,
 ): Promise<string> {
   const audioUrl = await uploadAudio(inputPath, apiKey);
   const transcriptId = await createTranscript(audioUrl, apiKey);
   const transcript = await pollTranscript(transcriptId, apiKey);
-  return formatSpeakerTranscript(transcript);
+  return formatSpeakerTranscript(transcript, offsetMilliseconds);
 }
 
 async function getAudioDurationSeconds(inputPath: string): Promise<number | null> {
@@ -236,6 +248,7 @@ async function transcribeSegmentWithRetries(
   apiKey: string,
   segmentNumber: number,
   totalSegments: number,
+  offsetMilliseconds: number,
 ): Promise<string> {
   let lastError: unknown;
   for (let attempt = 1; attempt <= SEGMENT_RETRY_ATTEMPTS; attempt += 1) {
@@ -244,7 +257,11 @@ async function transcribeSegmentWithRetries(
         { segmentNumber, totalSegments, attempt },
         "Transcribing audio segment",
       );
-      return await transcribeSingleAudioFile(segmentPath, apiKey);
+      return await transcribeSingleAudioFile(
+        segmentPath,
+        apiKey,
+        offsetMilliseconds,
+      );
     } catch (err) {
       lastError = err;
       logger.warn(
@@ -308,6 +325,7 @@ export async function transcribeAudioFile(
         apiKey,
         index + 1,
         segmentPaths.length,
+        index * AUDIO_SEGMENT_SECONDS * 1000,
       );
       transcriptParts.push(
         `=== Interval ${index + 1} of ${segmentPaths.length} ===\n${segmentText}`,
@@ -332,6 +350,6 @@ export async function transcribeAudioFile(
 export const transcriptionProvider = {
   name: "AssemblyAI direct API with speaker diarization",
   model:
-    "universal-3-5-pro (universal-2 fallback), 90-second long-audio segments",
+    "universal-3-5-pro (universal-2 fallback), two-minute long-audio segments with utterance timestamps",
   credentialSource: "ASSEMBLYAI_API_KEY",
 } as const;

@@ -186,6 +186,9 @@ export function UploadArea() {
           <p className="text-sm text-muted-foreground max-w-xs text-center">
             Supported formats: MP3, WAV, M4A, OGG · up to 1 GB
           </p>
+          <p className="text-xs font-medium text-muted-foreground">
+            Real speaker timestamps are added automatically.
+          </p>
         </div>
       )}
     </div>

@@ -47,10 +47,16 @@ export function CoherencePanel({ transcriptionId }: CoherencePanelProps) {
 
   const createJobMutation = useCreateCoherenceJob({
     mutation: {
-      onSuccess: () => {
+      onSuccess: (_data, variables) => {
         queryClient.invalidateQueries({ queryKey: getListCoherenceJobsQueryKey(transcriptionId) });
         setSpecs("");
-        toast({ title: "Job started" });
+        toast({
+          title:
+            variables.data.jobType === "play"
+              ? "Play creation started"
+              : "Perfect transcript started",
+          description: "Live progress is shown directly above the controls.",
+        });
       },
       onError: (err) => {
         const msg = err instanceof Error ? err.message : "Failed to start job";
@@ -60,6 +66,15 @@ export function CoherencePanel({ transcriptionId }: CoherencePanelProps) {
   });
 
   const isBusy = createJobMutation.isPending || (jobs && jobs.some(j => j.status !== "complete" && j.status !== "failed"));
+  const activeJob = jobs?.find(
+    (job) => job.status !== "complete" && job.status !== "failed",
+  );
+  const isStartingPolish =
+    createJobMutation.isPending &&
+    createJobMutation.variables?.data.jobType === "polish";
+  const activePolishJob =
+    activeJob?.jobType === "polish" ? activeJob : undefined;
+  const latestCompletedJob = jobs?.find((job) => job.status === "complete");
 
   const handleCreatePolish = () => {
     createJobMutation.mutate({
@@ -110,6 +125,85 @@ export function CoherencePanel({ transcriptionId }: CoherencePanelProps) {
         <Sparkles className="h-4 w-4 text-primary" />
         Perfect Transcript & Create Play
       </div>
+
+      {(activeJob || createJobMutation.isPending) && (
+        <div className="rounded-md border-2 border-primary/40 bg-primary/5 p-4 space-y-3">
+          <div className="flex items-center gap-3">
+            <Loader2 className="h-5 w-5 shrink-0 animate-spin text-primary" />
+            <div className="min-w-0">
+              <p className="font-semibold text-foreground">
+                {activeJob?.jobType === "play"
+                  ? "Creating play"
+                  : "Creating perfect transcript"}
+              </p>
+              <p className="text-sm text-muted-foreground">
+                {activeJob
+                  ? `${activeJob.status.replaceAll("_", " ")} — ${Math.round(activeJob.progress)}% complete`
+                  : "Starting job..."}
+              </p>
+            </div>
+          </div>
+          {activeJob && (
+            <>
+              <Progress value={activeJob.progress} className="h-2.5" />
+              <p className="text-xs font-medium text-muted-foreground">
+                Processing chunk {activeJob.currentChunk} of {activeJob.totalChunks}.
+                The result will appear here automatically when complete.
+              </p>
+            </>
+          )}
+        </div>
+      )}
+
+      {!activeJob &&
+        !createJobMutation.isPending &&
+        latestCompletedJob?.finalOutput && (
+          <div className="rounded-md border-2 border-emerald-500/40 bg-emerald-500/5 p-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <Check className="h-5 w-5 shrink-0 text-emerald-600" />
+                <div>
+                  <p className="font-semibold text-foreground">
+                    {latestCompletedJob.jobType === "play"
+                      ? "Play ready"
+                      : "Perfect transcript ready"}
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    {latestCompletedJob.finalWordCount?.toLocaleString()} words
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() =>
+                    handleCopy(
+                      latestCompletedJob.finalOutput!,
+                      latestCompletedJob.id,
+                    )
+                  }
+                >
+                  <Copy className="mr-2 h-4 w-4" />
+                  Copy
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={() =>
+                    handleDownload(
+                      latestCompletedJob.finalOutput!,
+                      latestCompletedJob.id,
+                      latestCompletedJob.jobType,
+                    )
+                  }
+                >
+                  <Download className="mr-2 h-4 w-4" />
+                  Download
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
       
       {/* Create Controls */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -130,10 +224,14 @@ export function CoherencePanel({ transcriptionId }: CoherencePanelProps) {
             size="sm"
             className="w-full mt-2"
           >
-            {createJobMutation.isPending && createJobMutation.variables?.data.jobType === "polish" ? (
+            {isStartingPolish || activePolishJob ? (
               <Loader2 className="w-4 h-4 mr-2 animate-spin" />
             ) : null}
-            Create perfect transcript
+            {isStartingPolish
+              ? "Starting perfect transcript..."
+              : activePolishJob
+                ? `Perfecting transcript — ${Math.round(activePolishJob.progress)}%`
+                : "Create perfect transcript"}
           </Button>
         </div>
 

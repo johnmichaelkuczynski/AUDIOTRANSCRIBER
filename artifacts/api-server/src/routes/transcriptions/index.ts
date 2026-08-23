@@ -1,7 +1,7 @@
 import { Router, type IRouter, type RequestHandler } from "express";
 import multer from "multer";
 import { createReadStream, createWriteStream } from "node:fs";
-import { unlink, writeFile } from "node:fs/promises";
+import { readFile, unlink, writeFile } from "node:fs/promises";
 import { pipeline } from "node:stream/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -35,6 +35,7 @@ const router: IRouter = Router();
 
 const objectStorage = new ObjectStorageService();
 const MAX_AUDIO_FILE_BYTES = 1024 * 1024 * 1024;
+const MAX_TRANSCRIPT_FILE_BYTES = 256 * 1024 * 1024;
 const UPLOAD_CHUNK_BYTES = 8 * 1024 * 1024;
 const UPLOAD_SESSION_TTL_MS = 60 * 60 * 1000;
 
@@ -107,15 +108,22 @@ type UploadSession = {
 };
 
 const uploadSessions = new Map<string, UploadSession>();
+const textUploadSessions = new Map<string, UploadSession>();
 
 async function removeUploadSession(session: UploadSession): Promise<void> {
   uploadSessions.delete(session.id);
+  textUploadSessions.delete(session.id);
   await unlink(session.path).catch(() => {});
 }
 
 const uploadSessionCleanupTimer = setInterval(() => {
   const cutoff = Date.now() - UPLOAD_SESSION_TTL_MS;
   for (const session of uploadSessions.values()) {
+    if (session.updatedAt < cutoff) {
+      void removeUploadSession(session);
+    }
+  }
+  for (const session of textUploadSessions.values()) {
     if (session.updatedAt < cutoff) {
       void removeUploadSession(session);
     }
@@ -408,6 +416,173 @@ router.delete(
   "/transcriptions/upload-sessions/:sessionId",
   async (req, res): Promise<void> => {
     const session = uploadSessions.get(String(req.params.sessionId));
+    if (session) {
+      await removeUploadSession(session);
+    }
+    res.status(204).end();
+  },
+);
+
+router.post(
+  "/transcriptions/text-upload-sessions",
+  async (req, res): Promise<void> => {
+    const filename =
+      typeof req.body?.filename === "string" ? req.body.filename.trim() : "";
+    const totalSize = Number(req.body?.fileSize);
+
+    if (!filename || !Number.isInteger(totalSize) || totalSize <= 0) {
+      res
+        .status(400)
+        .json({ error: "Filename and a positive transcript size are required." });
+      return;
+    }
+    if (totalSize > MAX_TRANSCRIPT_FILE_BYTES) {
+      res.status(413).json({
+        error: "Transcript files must be smaller than 256 MB.",
+      });
+      return;
+    }
+
+    const id = randomUUID();
+    const session: UploadSession = {
+      id,
+      path: join(tmpdir(), `transcript-text-session-${id}`),
+      filename,
+      mimetype: "text/plain",
+      totalSize,
+      receivedBytes: 0,
+      nextChunkIndex: 0,
+      updatedAt: Date.now(),
+    };
+    await writeFile(session.path, "");
+    textUploadSessions.set(id, session);
+
+    res.status(201).json({
+      id,
+      chunkSize: UPLOAD_CHUNK_BYTES,
+      receivedBytes: 0,
+      nextChunkIndex: 0,
+    });
+  },
+);
+
+router.post(
+  "/transcriptions/text-upload-sessions/:sessionId/chunks/:chunkIndex",
+  uploadSingleChunk,
+  async (req, res): Promise<void> => {
+    const chunk = req.file;
+    const session = textUploadSessions.get(String(req.params.sessionId));
+    const chunkIndex = Number(req.params.chunkIndex);
+
+    if (!chunk) {
+      res.status(400).json({ error: "No transcript chunk provided." });
+      return;
+    }
+    if (!session) {
+      await unlink(chunk.path).catch(() => {});
+      res
+        .status(404)
+        .json({ error: "Transcript upload expired. Please retry the import." });
+      return;
+    }
+    if (!Number.isInteger(chunkIndex) || chunkIndex < 0) {
+      await unlink(chunk.path).catch(() => {});
+      res.status(400).json({ error: "Invalid transcript chunk number." });
+      return;
+    }
+    if (chunkIndex < session.nextChunkIndex) {
+      await unlink(chunk.path).catch(() => {});
+      res.json({
+        receivedBytes: session.receivedBytes,
+        nextChunkIndex: session.nextChunkIndex,
+      });
+      return;
+    }
+    if (chunkIndex !== session.nextChunkIndex) {
+      await unlink(chunk.path).catch(() => {});
+      res.status(409).json({
+        error: `Expected chunk ${session.nextChunkIndex}.`,
+        nextChunkIndex: session.nextChunkIndex,
+      });
+      return;
+    }
+
+    const expectedSize = Math.min(
+      UPLOAD_CHUNK_BYTES,
+      session.totalSize - session.receivedBytes,
+    );
+    if (chunk.size !== expectedSize) {
+      await unlink(chunk.path).catch(() => {});
+      res.status(400).json({
+        error: `Invalid transcript chunk size. Expected ${expectedSize} bytes.`,
+      });
+      return;
+    }
+
+    try {
+      await pipeline(
+        createReadStream(chunk.path),
+        createWriteStream(session.path, { flags: "a" }),
+      );
+    } finally {
+      await unlink(chunk.path).catch(() => {});
+    }
+
+    session.receivedBytes += chunk.size;
+    session.nextChunkIndex += 1;
+    session.updatedAt = Date.now();
+
+    res.json({
+      receivedBytes: session.receivedBytes,
+      nextChunkIndex: session.nextChunkIndex,
+    });
+  },
+);
+
+router.post(
+  "/transcriptions/text-upload-sessions/:sessionId/complete",
+  async (req, res): Promise<void> => {
+    const session = textUploadSessions.get(String(req.params.sessionId));
+    if (!session) {
+      res
+        .status(404)
+        .json({ error: "Transcript upload expired. Please retry the import." });
+      return;
+    }
+    if (session.receivedBytes !== session.totalSize) {
+      res.status(409).json({
+        error: `Transcript upload is incomplete: ${session.receivedBytes} of ${session.totalSize} bytes received.`,
+      });
+      return;
+    }
+
+    try {
+      const text = (await readFile(session.path, "utf8")).trim();
+      if (!text) {
+        res.status(400).json({ error: "Transcript text must not be blank." });
+        return;
+      }
+      const [record] = await db
+        .insert(transcriptionsTable)
+        .values({
+          filename: session.filename,
+          fileSize: Buffer.byteLength(text, "utf8"),
+          text,
+          status: "completed",
+          audioPath: null,
+        })
+        .returning();
+      res.status(201).json(GetTranscriptionResponse.parse(record));
+    } finally {
+      await removeUploadSession(session);
+    }
+  },
+);
+
+router.delete(
+  "/transcriptions/text-upload-sessions/:sessionId",
+  async (req, res): Promise<void> => {
+    const session = textUploadSessions.get(String(req.params.sessionId));
     if (session) {
       await removeUploadSession(session);
     }

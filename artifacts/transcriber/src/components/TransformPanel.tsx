@@ -1,5 +1,10 @@
-import { useState } from "react";
-import { useTransformTranscription } from "@workspace/api-client-react";
+import { useEffect, useRef, useState } from "react";
+import {
+  getGetTranscriptionStatsQueryKey,
+  getListTranscriptionsQueryKey,
+  useTransformTranscription,
+} from "@workspace/api-client-react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
@@ -10,15 +15,28 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Loader2, Sparkles, Wand2, Copy, Check, AlertCircle, Users } from "lucide-react";
+import {
+  Loader2,
+  Sparkles,
+  Wand2,
+  Copy,
+  Check,
+  AlertCircle,
+  Users,
+  Download,
+} from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { Progress } from "@/components/ui/progress";
+import { importTranscriptInChunks } from "@/lib/chunkedTextImport";
 
 type Provider = "openai" | "deepseek" | "anthropic" | "venice";
 type Mode = "cleanup" | "speakers" | "rewrite";
 
 interface TransformPanelProps {
   transcriptionId: number;
+  transcriptionText: string;
+  transcriptionFilename: string;
 }
 
 const PROVIDER_LABEL: Record<Provider, string> = {
@@ -28,13 +46,36 @@ const PROVIDER_LABEL: Record<Provider, string> = {
   venice: "Venice AI",
 };
 
-export function TransformPanel({ transcriptionId }: TransformPanelProps) {
+function removeVocalFillers(text: string): string {
+  return text
+    .replace(/\b(?:um+|uh+m*|er+m*|ah+|hmm+)\b[,.!?;:]?[ \t]*/giu, "")
+    .replace(/\b([\p{L}\p{N}'’-]+)(?:[ \t]+\1\b)+/giu, "$1")
+    .replace(/[ \t]+([,.;:!?])/g, "$1")
+    .replace(/[ \t]{2,}/g, " ")
+    .replace(/^[ \t]+|[ \t]+$/gm, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+export function TransformPanel({
+  transcriptionId,
+  transcriptionText,
+  transcriptionFilename,
+}: TransformPanelProps) {
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [provider, setProvider] = useState<Provider>("openai");
   const [instructions, setInstructions] = useState("");
-  const [result, setResult] = useState<{ text: string; mode: Mode; provider: Provider } | null>(null);
+  const [result, setResult] = useState<{
+    text: string;
+    mode: Mode;
+    provider?: Provider;
+  } | null>(null);
   const [copied, setCopied] = useState(false);
   const [activeMode, setActiveMode] = useState<Mode | null>(null);
+  const [fillerProgress, setFillerProgress] = useState<number | null>(null);
+  const [isRemovingFillers, setIsRemovingFillers] = useState(false);
+  const fillerAbortRef = useRef<AbortController | null>(null);
 
   const transformMutation = useTransformTranscription({
     mutation: {
@@ -48,6 +89,74 @@ export function TransformPanel({ transcriptionId }: TransformPanelProps) {
       onSettled: () => setActiveMode(null),
     },
   });
+
+  useEffect(() => {
+    const cancel = () => {
+      fillerAbortRef.current?.abort();
+      fillerAbortRef.current = null;
+      setIsRemovingFillers(false);
+      setFillerProgress(null);
+    };
+    window.addEventListener("transcriber:clear-current-upload", cancel);
+    return () => {
+      window.removeEventListener("transcriber:clear-current-upload", cancel);
+    };
+  }, []);
+
+  const removeFillersAndSave = async () => {
+    const cleaned = removeVocalFillers(transcriptionText);
+    if (!cleaned || cleaned === transcriptionText.trim()) {
+      toast({
+        title: "No filler words found",
+        description: "The transcript was left unchanged.",
+      });
+      return;
+    }
+
+    const controller = new AbortController();
+    fillerAbortRef.current = controller;
+    setIsRemovingFillers(true);
+    setFillerProgress(0);
+    setResult({ text: cleaned, mode: "cleanup" });
+
+    const baseName =
+      transcriptionFilename.replace(/\.[^.]+$/, "") || "transcript";
+    try {
+      await importTranscriptInChunks(
+        new Blob([cleaned], { type: "text/plain" }),
+        `${baseName}-filler-free.txt`,
+        setFillerProgress,
+        controller.signal,
+      );
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: getListTranscriptionsQueryKey(),
+        }),
+        queryClient.invalidateQueries({
+          queryKey: getGetTranscriptionStatsQueryKey(),
+        }),
+      ]);
+      toast({
+        title: "Filler-free transcript saved",
+        description: "A new cleaned copy was added. The original is unchanged.",
+      });
+    } catch (error) {
+      if (controller.signal.aborted) return;
+      const message =
+        error instanceof Error ? error.message : "Failed to save cleaned transcript";
+      toast({
+        title: "Cleanup failed",
+        description: message,
+        variant: "destructive",
+      });
+    } finally {
+      if (fillerAbortRef.current === controller) {
+        fillerAbortRef.current = null;
+        setIsRemovingFillers(false);
+        setFillerProgress(null);
+      }
+    }
+  };
 
   const runTransform = (mode: Mode) => {
     if (mode === "rewrite" && !instructions.trim()) {
@@ -77,11 +186,28 @@ export function TransformPanel({ transcriptionId }: TransformPanelProps) {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const isCleaning = transformMutation.isPending && activeMode === "cleanup";
+  const handleDownloadResult = () => {
+    if (!result) return;
+    const blob = new Blob([result.text], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    const baseName =
+      transcriptionFilename.replace(/\.[^.]+$/, "") || "transcript";
+    anchor.download =
+      result.mode === "cleanup"
+        ? `${baseName}-filler-free.txt`
+        : `${baseName}-${result.mode}.txt`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    document.body.removeChild(anchor);
+    URL.revokeObjectURL(url);
+  };
+
   const isFormattingSpeakers =
     transformMutation.isPending && activeMode === "speakers";
   const isRewriting = transformMutation.isPending && activeMode === "rewrite";
-  const busy = transformMutation.isPending;
+  const busy = transformMutation.isPending || isRemovingFillers;
 
   return (
     <div className="mt-4 space-y-4 rounded-lg border border-border/40 bg-muted/10 p-4">
@@ -108,17 +234,43 @@ export function TransformPanel({ transcriptionId }: TransformPanelProps) {
         </div>
       </div>
 
-      <div className="flex flex-wrap items-start gap-3">
+      <div className="rounded-lg border-2 border-primary/30 bg-primary/5 p-4 space-y-3">
+        <div>
+          <p className="text-sm font-semibold text-foreground">
+            Remove filler words
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Removes “um,” “uh,” “uhm,” “er,” “ah,” “hmm,” and immediate
+            repeated words from the full transcript. Saves a new cleaned copy;
+            the original stays unchanged.
+          </p>
+        </div>
         <Button
-          variant="outline"
-          size="sm"
-          onClick={() => runTransform("cleanup")}
+          onClick={removeFillersAndSave}
           disabled={busy}
-          className="gap-2"
+          className="w-full gap-2"
         >
-          {isCleaning ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-          Clean up (remove fillers & repetitions)
+          {isRemovingFillers ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <Sparkles className="h-4 w-4" />
+          )}
+          {isRemovingFillers
+            ? "Removing filler words and saving..."
+            : 'Remove “um,” “uh,” and filler words'}
         </Button>
+        {fillerProgress !== null && (
+          <div className="space-y-1.5">
+            <div className="flex justify-between text-xs font-medium text-muted-foreground">
+              <span>Saving filler-free transcript</span>
+              <span>{fillerProgress}%</span>
+            </div>
+            <Progress value={fillerProgress} className="h-2" />
+          </div>
+        )}
+      </div>
+
+      <div className="flex flex-wrap items-start gap-3">
         <Button
           variant="outline"
           size="sm"
@@ -166,25 +318,42 @@ export function TransformPanel({ transcriptionId }: TransformPanelProps) {
           <div className="flex items-center justify-between">
             <div className="text-xs font-medium text-muted-foreground">
               {result.mode === "cleanup"
-                ? "Cleaned transcript"
+                ? "Saved filler-free transcript"
                 : result.mode === "speakers"
                   ? "Speaker-formatted transcript"
                   : "Rewritten transcript"}{" "}
-              ·{" "}
-              <span className="text-foreground">{PROVIDER_LABEL[result.provider]}</span>
-            </div>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleCopyResult}
-              className={cn(
-                "h-7 gap-1.5 text-xs text-muted-foreground hover:text-foreground",
-                copied && "text-green-600 hover:text-green-700",
+              {result.provider && (
+                <>
+                  ·{" "}
+                  <span className="text-foreground">
+                    {PROVIDER_LABEL[result.provider]}
+                  </span>
+                </>
               )}
-            >
-              {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
-              {copied ? "Copied" : "Copy"}
-            </Button>
+            </div>
+            <div className="flex items-center gap-1">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleCopyResult}
+                className={cn(
+                  "h-7 gap-1.5 text-xs text-muted-foreground hover:text-foreground",
+                  copied && "text-green-600 hover:text-green-700",
+                )}
+              >
+                {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+                {copied ? "Copied" : "Copy"}
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleDownloadResult}
+                className="h-7 gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+              >
+                <Download className="h-3.5 w-3.5" />
+                Download
+              </Button>
+            </div>
           </div>
           <p className="max-h-[300px] overflow-y-auto whitespace-pre-wrap rounded-lg border border-border/40 bg-background p-4 font-mono text-sm leading-relaxed text-foreground/90">
             {result.text}

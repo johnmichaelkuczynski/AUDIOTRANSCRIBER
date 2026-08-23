@@ -192,7 +192,11 @@ export function TranscriptionCard({ transcription }: TranscriptionCardProps) {
             <p className="text-sm text-foreground/90 whitespace-pre-wrap leading-relaxed font-mono bg-muted/30 p-4 rounded-lg border border-border/40 max-h-[300px] overflow-y-auto">
               {transcription.text}
             </p>
-            <TransformPanel transcriptionId={transcription.id} />
+            <TransformPanel
+              transcriptionId={transcription.id}
+              transcriptionText={transcription.text}
+              transcriptionFilename={transcription.filename}
+            />
             <CoherencePanel transcriptionId={transcription.id} />
           </div>
         )}
