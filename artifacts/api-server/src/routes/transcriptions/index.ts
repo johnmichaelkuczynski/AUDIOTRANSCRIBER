@@ -75,24 +75,6 @@ router.post("/transcriptions", uploadSingleAudio, async (req, res): Promise<void
     return;
   }
 
-  let audioPath: string | null = null;
-  try {
-    const uploadURL = await objectStorage.getObjectEntityUploadURL();
-    const stream = createReadStream(file.path);
-    const putRes = await fetch(uploadURL, {
-      method: "PUT",
-      body: stream as unknown as RequestInit["body"],
-      headers: { "Content-Type": file.mimetype || "application/octet-stream" },
-      duplex: "half",
-    } as RequestInit & { duplex: "half" });
-    if (!putRes.ok) {
-      throw new Error(`Storage upload failed with status ${putRes.status}`);
-    }
-    audioPath = objectStorage.normalizeObjectEntityPath(uploadURL);
-  } catch (err) {
-    req.log.error({ err }, "Failed to persist audio to object storage");
-  }
-
   let record;
   try {
     [record] = await db
@@ -102,40 +84,92 @@ router.post("/transcriptions", uploadSingleAudio, async (req, res): Promise<void
         fileSize: file.size,
         status: "processing",
         text: "",
-        audioPath,
+        audioPath: null,
       })
       .returning();
   } catch (err) {
-    if (audioPath) {
-      try {
-        const orphan = await objectStorage.getObjectEntityFile(audioPath);
-        await orphan.delete();
-      } catch (cleanupErr) {
-        if (!(cleanupErr instanceof ObjectNotFoundError)) {
-          req.log.error({ err: cleanupErr }, "Failed to clean up orphaned audio after insert failure");
-        }
-      }
-    }
     await unlink(file.path).catch(() => {});
     throw err;
   }
 
   res.status(201).json(GetTranscriptionResponse.parse(record));
 
-  try {
-    const transcribedText = await transcribeAudioFile(file.path);
+  const storageTask = (async (): Promise<string | null> => {
+    try {
+      const uploadURL = await objectStorage.getObjectEntityUploadURL();
+      const stream = createReadStream(file.path);
+      const putRes = await fetch(uploadURL, {
+        method: "PUT",
+        body: stream as unknown as RequestInit["body"],
+        headers: { "Content-Type": file.mimetype || "application/octet-stream" },
+        duplex: "half",
+      } as RequestInit & { duplex: "half" });
+      if (!putRes.ok) {
+        throw new Error(`Storage upload failed with status ${putRes.status}`);
+      }
+      return objectStorage.normalizeObjectEntityPath(uploadURL);
+    } catch (err) {
+      logger.error({ err, id: record.id }, "Failed to persist audio to object storage");
+      return null;
+    }
+  })();
 
-    await db
-      .update(transcriptionsTable)
-      .set({ text: transcribedText, status: "completed" })
+  const transcriptionTask = transcribeAudioFile(file.path);
+
+  try {
+    const [storageResult, transcriptionResult] = await Promise.allSettled([
+      storageTask,
+      transcriptionTask,
+    ]);
+    const audioPath =
+      storageResult.status === "fulfilled" ? storageResult.value : null;
+
+    const [current] = await db
+      .select({ id: transcriptionsTable.id })
+      .from(transcriptionsTable)
       .where(eq(transcriptionsTable.id, record.id));
-  } catch (err) {
-    logger.error({ err, id: record.id }, "Transcription failed");
-    const errorMessage = err instanceof Error ? err.message : "Unknown error";
-    await db
-      .update(transcriptionsTable)
-      .set({ status: "failed", errorMessage })
-      .where(eq(transcriptionsTable.id, record.id));
+
+    if (!current) {
+      if (audioPath) {
+        try {
+          const orphan = await objectStorage.getObjectEntityFile(audioPath);
+          await orphan.delete();
+        } catch (cleanupErr) {
+          if (!(cleanupErr instanceof ObjectNotFoundError)) {
+            logger.error(
+              { err: cleanupErr, id: record.id },
+              "Failed to remove audio for a deleted transcription",
+            );
+          }
+        }
+      }
+      return;
+    }
+
+    if (transcriptionResult.status === "fulfilled") {
+      await db
+        .update(transcriptionsTable)
+        .set({
+          text: transcriptionResult.value,
+          status: "completed",
+          errorMessage: null,
+          audioPath,
+        })
+        .where(eq(transcriptionsTable.id, record.id));
+    } else {
+      logger.error(
+        { err: transcriptionResult.reason, id: record.id },
+        "Transcription failed",
+      );
+      const errorMessage =
+        transcriptionResult.reason instanceof Error
+          ? transcriptionResult.reason.message
+          : "Unknown error";
+      await db
+        .update(transcriptionsTable)
+        .set({ status: "failed", errorMessage, audioPath })
+        .where(eq(transcriptionsTable.id, record.id));
+    }
   } finally {
     await unlink(file.path).catch(() => {});
   }
