@@ -13,6 +13,10 @@ import { Loader2, Upload, AlertCircle, FileText, XCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Progress } from "@/components/ui/progress";
 import { importTranscriptInChunks } from "@/lib/chunkedTextImport";
+import {
+  CLEAR_CURRENT_UPLOAD_EVENT,
+  resetTranscriberPage,
+} from "@/lib/resetPage";
 
 export function ImportTranscriptPanel() {
   const [title, setTitle] = useState("");
@@ -41,9 +45,9 @@ export function ImportTranscriptPanel() {
   }, []);
 
   useEffect(() => {
-    window.addEventListener("transcriber:clear-current-upload", clearImport);
+    window.addEventListener(CLEAR_CURRENT_UPLOAD_EVENT, clearImport);
     return () => {
-      window.removeEventListener("transcriber:clear-current-upload", clearImport);
+      window.removeEventListener(CLEAR_CURRENT_UPLOAD_EVENT, clearImport);
     };
   }, [clearImport]);
 
@@ -195,7 +199,7 @@ export function ImportTranscriptPanel() {
                 type="button"
                 variant="outline"
                 className="gap-2"
-                onClick={clearImport}
+                onClick={resetTranscriberPage}
               >
                 <XCircle className="h-4 w-4" />
                 Clear

@@ -19,6 +19,10 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
+import {
+  CLEAR_CURRENT_UPLOAD_EVENT,
+  resetTranscriberPage,
+} from "@/lib/resetPage";
 
 export function AppHeader() {
   const [location] = useLocation();
@@ -34,7 +38,7 @@ export function AppHeader() {
 
   const startNewProject = async () => {
     setIsStartingNewProject(true);
-    window.dispatchEvent(new Event("transcriber:clear-current-upload"));
+    window.dispatchEvent(new Event(CLEAR_CURRENT_UPLOAD_EVENT));
 
     try {
       const latest = await refetchTranscriptions();
@@ -111,14 +115,11 @@ export function AppHeader() {
             </button>
             <button
               type="button"
-              onClick={() => {
-                window.dispatchEvent(new Event("transcriber:clear-current-upload"));
-              }}
+              onClick={resetTranscriberPage}
               className="inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-3 py-2 text-sm font-semibold text-foreground hover:bg-muted"
             >
               <XCircle className="w-4 h-4" />
-              <span className="hidden lg:inline">Clear current upload</span>
-              <span className="lg:hidden">Clear</span>
+              <span>Clear</span>
             </button>
             <Link
               href="/diagnostics"

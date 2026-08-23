@@ -7,4 +7,8 @@ Legal transcript polishing must separate global identity resolution from local c
 
 **Why:** A complex all-purpose skeleton can omit phonetic variants even when a focused identity pass resolves them correctly. Word-count pressure also rewards retaining filler, while blanket phrase deletion can damage meaningful language such as “as you know.”
 
-**How to apply:** Allow polished text to shorten materially; remove true vocal fillers and repetitions deterministically; treat discourse markers contextually; inherit labels on split continuation paragraphs; canonicalize names globally; and refuse completion when labels, variants, legal terms, typography, or disfluency checks fail. When the text remains genuinely ambiguous and stored audio exists, inspect the relevant audio segment rather than guessing a name.
+When a speaker’s identity is established by self-introduction, direct confirmation, repeated direct address, or an explicit user mapping, replace generic source labels with one canonical legal label. An exact spelling supplied by the user outranks an ASR spelling.
+
+**Why:** Preserving `SPEAKER C/E` after conclusive identification made an otherwise polished legal transcript look unfinished. Generic one-letter labels must never enter body-name canonicalization: treating `A/C/D` as surname variants can corrupt ordinary articles and abbreviations throughout the text.
+
+**How to apply:** Allow polished text to shorten materially; remove true vocal fillers and repetitions deterministically; treat discourse markers contextually; inherit labels on split continuation paragraphs; canonicalize names globally; map resolved speakers to canonical labels; exclude generic or shorter-than-three-character variants from body replacement; and refuse completion when labels, variants, legal terms, typography, or disfluency checks fail. When text remains genuinely ambiguous and stored audio exists, inspect the relevant audio segment rather than guessing a name.

@@ -11,6 +11,10 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { uploadAudioFileInChunks } from "@/lib/chunkedUpload";
+import {
+  CLEAR_CURRENT_UPLOAD_EVENT,
+  resetTranscriberPage,
+} from "@/lib/resetPage";
 
 type RecorderState = "idle" | "recording" | "recorded";
 
@@ -315,10 +319,10 @@ export function Recorder() {
   }, [resetRecording]);
 
   useEffect(() => {
-    window.addEventListener("transcriber:clear-current-upload", handleClearUpload);
+    window.addEventListener(CLEAR_CURRENT_UPLOAD_EVENT, handleClearUpload);
     return () => {
       window.removeEventListener(
-        "transcriber:clear-current-upload",
+        CLEAR_CURRENT_UPLOAD_EVENT,
         handleClearUpload,
       );
     };
@@ -371,7 +375,7 @@ export function Recorder() {
             type="button"
             variant="outline"
             className="mt-4 gap-2"
-            onClick={handleClearUpload}
+            onClick={resetTranscriberPage}
           >
             <X className="w-4 h-4" />
             Clear

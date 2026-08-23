@@ -5,6 +5,10 @@ import { UploadCloud, FileAudio, Loader2, X } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { uploadAudioFileInChunks } from "@/lib/chunkedUpload";
+import {
+  CLEAR_CURRENT_UPLOAD_EVENT,
+  resetTranscriberPage,
+} from "@/lib/resetPage";
 
 export function UploadArea() {
   const [isDragging, setIsDragging] = useState(false);
@@ -110,10 +114,10 @@ export function UploadArea() {
   }, []);
 
   useEffect(() => {
-    window.addEventListener("transcriber:clear-current-upload", clearCurrentUpload);
+    window.addEventListener(CLEAR_CURRENT_UPLOAD_EVENT, clearCurrentUpload);
     return () => {
       window.removeEventListener(
-        "transcriber:clear-current-upload",
+        CLEAR_CURRENT_UPLOAD_EVENT,
         clearCurrentUpload,
       );
     };
@@ -121,7 +125,7 @@ export function UploadArea() {
 
   const handleClear = (event: React.MouseEvent) => {
     event.stopPropagation();
-    clearCurrentUpload();
+    resetTranscriberPage();
   };
 
   return (

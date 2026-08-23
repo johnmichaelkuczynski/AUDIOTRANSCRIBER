@@ -252,7 +252,7 @@ export function TranscriptionCard({ transcription }: TranscriptionCardProps) {
           <AlertDialogTrigger asChild>
             <Button variant="ghost" size="sm" className="h-8 gap-2 px-3 text-muted-foreground hover:text-destructive hover:bg-destructive/10">
               <Trash2 className="w-4 h-4" />
-              <span>Clear</span>
+              <span>Delete</span>
             </Button>
           </AlertDialogTrigger>
           <AlertDialogContent>

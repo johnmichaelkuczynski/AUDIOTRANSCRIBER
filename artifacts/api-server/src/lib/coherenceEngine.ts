@@ -467,6 +467,15 @@ function lastName(value: string): string {
     .at(-1) ?? "";
 }
 
+function isSafePersonNameVariant(value: string): boolean {
+  const surname = lastName(value);
+  return (
+    surname.length >= 3 &&
+    !/^SPEAKER$/iu.test(surname) &&
+    /\p{L}/u.test(surname)
+  );
+}
+
 function canonicalizeTranscriptNames(
   text: string,
   source: string,
@@ -485,7 +494,7 @@ function canonicalizeTranscriptNames(
       continue;
     }
     const surname = lastName(record.canonical);
-    if (!surname) continue;
+    if (!isSafePersonNameVariant(surname)) continue;
     const matchingLedger = ledgers.find((existing) => {
       const threshold =
         Math.min(existing.canonical.length, surname.length) >= 6 ? 2 : 1;
@@ -499,7 +508,10 @@ function canonicalizeTranscriptNames(
       for (const variant of record.variants) {
         if (typeof variant !== "string") continue;
         const variantSurname = lastName(variant);
-        if (variantSurname && variantSurname !== ledger.canonical) {
+        if (
+          isSafePersonNameVariant(variantSurname) &&
+          variantSurname !== ledger.canonical
+        ) {
           ledger.variants.add(variantSurname);
         }
       }
@@ -657,7 +669,7 @@ function assertPerfectTranscriptQuality(
       if (typeof variant !== "string") continue;
       const variantSurname = lastName(variant);
       if (
-        variantSurname &&
+        isSafePersonNameVariant(variantSurname) &&
         variantSurname.toLocaleLowerCase() !==
           canonicalSurname.toLocaleLowerCase() &&
         new RegExp(
