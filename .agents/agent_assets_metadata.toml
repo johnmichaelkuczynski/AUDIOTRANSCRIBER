@@ -42,3 +42,17 @@ uri = "file://attached_assets/recording-4-transcript.txt"
 type = "text"
 title = "Recording 4 — Timestamped Transcript"
 description = "Complete hearing transcript with 35 timestamped speaker turns, 5,112 words, confirmed legal/name corrections, and 0.432% variance versus the independent run."
+
+[[outputs]]
+id = "GhjRji519IdrhblidgtKC"
+uri = "file://attached_assets/recording-5-transcript.txt"
+type = "text"
+title = "Recording 5 — Timestamped Transcript"
+description = "Complete hearing transcript with 73 timestamped speaker turns and 5,851 words. Independent runs differed by 0.017%, and confirmed name/legal recognition errors were corrected against direct audio."
+
+[[outputs]]
+id = "mGtJ56Y_AO9kuzZjTLR3a"
+uri = "file://attached_assets/recordings-1-5-combined-transcript.txt"
+type = "text"
+title = "Combined Hearing Transcript — Recordings 1–5"
+description = "One verified transcript containing all five delivered recordings verbatim: 27,800 transcript words and 550 timestamped speaker turns, with timestamps restarting within each clearly labeled recording section."
