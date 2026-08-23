@@ -51,14 +51,7 @@ paths:
         content:
           multipart/form-data:
             schema:
-              type: object
-              properties:
-                file:
-                  type: string
-                  format: binary
-                  description: The audio file to transcribe (MP3, WAV, etc.)
-              required:
-                - file
+              $ref: "#/components/schemas/AudioTranscriptionInput"
       responses:
         "201":
           description: Transcription created
@@ -68,6 +61,37 @@ paths:
                 $ref: "#/components/schemas/Transcription"
         "400":
           description: Invalid file or request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: A verified recording is already processing in the batch
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /transcription-batches/{batchId}/combined:
+    get:
+      operationId: getCombinedTranscript
+      tags: [transcriptions]
+      summary: Combine passed verified recordings in a batch
+      parameters:
+        - name: batchId
+          in: path
+          required: true
+          schema:
+            type: string
+            minLength: 1
+      responses:
+        "200":
+          description: Combined verified transcript
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CombinedTranscript"
+        "404":
+          description: No completed, passed verified recordings exist in the batch
           content:
             application/json:
               schema:
@@ -330,6 +354,25 @@ paths:
                 $ref: "#/components/schemas/DiagnosticReport"
 components:
   schemas:
+    AudioTranscriptionInput:
+      type: object
+      properties:
+        file:
+          type: string
+          format: binary
+          description: The audio file to transcribe (MP3, WAV, etc.)
+        processingMode:
+          type: string
+          enum: [segmented, verified]
+          default: segmented
+        knownTerms:
+          type: string
+          description: Newline-delimited key terms and optional "heard wrong => confirmed spelling" corrections.
+        batchId:
+          type: string
+          minLength: 1
+          description: Required when processingMode is verified. Groups recordings into one sequential verified session.
+      required: [file]
     TranscriptTextInput:
       type: object
       properties:
@@ -472,6 +515,29 @@ components:
         audioPath:
           type: ["string", "null"]
           description: Path to the stored original audio, if persisted. Null when no audio is available for playback.
+        processingMode:
+          type: string
+          enum: [segmented, verified]
+        verificationStatus:
+          type: ["string", "null"]
+          enum: [pending, passed, failed, null]
+        verificationRunA:
+          type: ["string", "null"]
+        verificationRunB:
+          type: ["string", "null"]
+        verificationWordCountA:
+          type: ["integer", "null"]
+        verificationWordCountB:
+          type: ["integer", "null"]
+        verificationVarianceBps:
+          type: ["integer", "null"]
+          description: Word-count variance in basis points; 100 bps equals 1%.
+        knownTerms:
+          type: ["string", "null"]
+        batchId:
+          type: ["string", "null"]
+        batchPosition:
+          type: ["integer", "null"]
         createdAt:
           type: string
           format: date-time
@@ -483,7 +549,29 @@ components:
         - status
         - errorMessage
         - audioPath
+        - processingMode
+        - verificationStatus
+        - verificationRunA
+        - verificationRunB
+        - verificationWordCountA
+        - verificationWordCountB
+        - verificationVarianceBps
+        - knownTerms
+        - batchId
+        - batchPosition
         - createdAt
+    CombinedTranscript:
+      type: object
+      properties:
+        filename:
+          type: string
+        text:
+          type: string
+        recordingCount:
+          type: integer
+        totalWordCount:
+          type: integer
+      required: [filename, text, recordingCount, totalWordCount]
     TranscriptionStats:
       type: object
       properties:

@@ -32,6 +32,26 @@ export const ListTranscriptionsResponseItem = zod.object({
     .describe(
       "Path to the stored original audio, if persisted. Null when no audio is available for playback.",
     ),
+  processingMode: zod.enum(["segmented", "verified"]),
+  verificationStatus: zod
+    .union([
+      zod.literal("pending"),
+      zod.literal("passed"),
+      zod.literal("failed"),
+      zod.literal(null),
+    ])
+    .nullable(),
+  verificationRunA: zod.string().nullable(),
+  verificationRunB: zod.string().nullable(),
+  verificationWordCountA: zod.number().nullable(),
+  verificationWordCountB: zod.number().nullable(),
+  verificationVarianceBps: zod
+    .number()
+    .nullable()
+    .describe("Word-count variance in basis points; 100 bps equals 1%."),
+  knownTerms: zod.string().nullable(),
+  batchId: zod.string().nullable(),
+  batchPosition: zod.number().nullable(),
   createdAt: zod.coerce.date(),
 });
 export const ListTranscriptionsResponse = zod.array(
@@ -42,10 +62,43 @@ export const ListTranscriptionsResponse = zod.array(
  * Accepts an audio file upload and returns the transcription
  * @summary Upload and transcribe an audio file
  */
+export const createTranscriptionBodyProcessingModeDefault = `segmented`;
+
 export const CreateTranscriptionBody = zod.object({
   file: zod
     .instanceof(File)
     .describe("The audio file to transcribe (MP3, WAV, etc.)"),
+  processingMode: zod
+    .enum(["segmented", "verified"])
+    .default(createTranscriptionBodyProcessingModeDefault),
+  knownTerms: zod
+    .string()
+    .optional()
+    .describe(
+      'Newline-delimited key terms and optional \"heard wrong => confirmed spelling\" corrections.',
+    ),
+  batchId: zod
+    .string()
+    .min(1)
+    .optional()
+    .describe(
+      "Required when processingMode is verified. Groups recordings into one sequential verified session.",
+    ),
+});
+
+/**
+ * @summary Combine passed verified recordings in a batch
+ */
+
+export const GetCombinedTranscriptParams = zod.object({
+  batchId: zod.coerce.string().min(1),
+});
+
+export const GetCombinedTranscriptResponse = zod.object({
+  filename: zod.string(),
+  text: zod.string(),
+  recordingCount: zod.number(),
+  totalWordCount: zod.number(),
 });
 
 /**
@@ -174,6 +227,26 @@ export const GetTranscriptionResponse = zod.object({
     .describe(
       "Path to the stored original audio, if persisted. Null when no audio is available for playback.",
     ),
+  processingMode: zod.enum(["segmented", "verified"]),
+  verificationStatus: zod
+    .union([
+      zod.literal("pending"),
+      zod.literal("passed"),
+      zod.literal("failed"),
+      zod.literal(null),
+    ])
+    .nullable(),
+  verificationRunA: zod.string().nullable(),
+  verificationRunB: zod.string().nullable(),
+  verificationWordCountA: zod.number().nullable(),
+  verificationWordCountB: zod.number().nullable(),
+  verificationVarianceBps: zod
+    .number()
+    .nullable()
+    .describe("Word-count variance in basis points; 100 bps equals 1%."),
+  knownTerms: zod.string().nullable(),
+  batchId: zod.string().nullable(),
+  batchPosition: zod.number().nullable(),
   createdAt: zod.coerce.date(),
 });
 

@@ -6,7 +6,7 @@ import { pipeline } from "node:stream/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { randomUUID } from "node:crypto";
-import { eq, sql, count } from "drizzle-orm";
+import { and, asc, eq, sql, count } from "drizzle-orm";
 import { db, reconstructionJobsTable, transcriptionsTable } from "@workspace/db";
 import {
   GetTranscriptionParams,
@@ -24,11 +24,16 @@ import {
   ListCoherenceJobsResponse,
   GetCoherenceJobParams,
   GetCoherenceJobResponse,
+  GetCombinedTranscriptParams,
+  GetCombinedTranscriptResponse,
 } from "@workspace/api-zod";
 import { logger } from "../../lib/logger";
 import { transformTranscript } from "../../lib/llm";
 import { ObjectStorageService, ObjectNotFoundError } from "../../lib/objectStorage";
-import { transcribeAudioFile } from "../../lib/transcription";
+import {
+  transcribeAudioFile,
+  transcribeVerifiedAudioFile,
+} from "../../lib/transcription";
 import { countWords, createPersistedCoherenceJob, enqueueCoherenceJob } from "../../lib/coherenceEngine";
 
 const router: IRouter = Router();
@@ -105,6 +110,9 @@ type UploadSession = {
   receivedBytes: number;
   nextChunkIndex: number;
   updatedAt: number;
+  processingMode?: "segmented" | "verified";
+  knownTerms?: string | null;
+  batchId?: string | null;
 };
 
 const uploadSessions = new Map<string, UploadSession>();
@@ -131,7 +139,38 @@ const uploadSessionCleanupTimer = setInterval(() => {
 }, 15 * 60 * 1000);
 uploadSessionCleanupTimer.unref();
 
-async function processDiskAudio(recordId: number, file: DiskAudioUpload): Promise<void> {
+type AudioProcessingOptions = {
+  processingMode: "segmented" | "verified";
+  knownTerms: string | null;
+  batchId: string | null;
+};
+
+function readAudioProcessingOptions(
+  body: Record<string, unknown> | undefined,
+): AudioProcessingOptions {
+  const processingMode = body?.processingMode ?? "segmented";
+  if (processingMode !== "segmented" && processingMode !== "verified") {
+    throw new Error("processingMode must be either segmented or verified.");
+  }
+  const knownTerms =
+    typeof body?.knownTerms === "string" && body.knownTerms.trim()
+      ? body.knownTerms.trim()
+      : null;
+  const batchId =
+    typeof body?.batchId === "string" && body.batchId.trim()
+      ? body.batchId.trim()
+      : null;
+  if (processingMode === "verified" && !batchId) {
+    throw new Error("Verified transcription requires a session ID.");
+  }
+  return { processingMode, knownTerms, batchId };
+}
+
+async function processDiskAudio(
+  recordId: number,
+  file: DiskAudioUpload,
+  options: AudioProcessingOptions,
+): Promise<void> {
   const storageTask = (async (): Promise<string | null> => {
     try {
       const uploadURL = await objectStorage.getObjectEntityUploadURL();
@@ -152,18 +191,25 @@ async function processDiskAudio(recordId: number, file: DiskAudioUpload): Promis
     }
   })();
 
-  const transcriptionTask = transcribeAudioFile(file.path, {
-    onSegmentCompleted: async ({ segmentNumber, totalSegments, combinedText }) => {
-      await db
-        .update(transcriptionsTable)
-        .set({ text: combinedText })
-        .where(eq(transcriptionsTable.id, recordId));
-      logger.info(
-        { id: recordId, segmentNumber, totalSegments },
-        "Published completed transcription interval",
-      );
-    },
-  });
+  const transcriptionTask =
+    options.processingMode === "verified"
+      ? transcribeVerifiedAudioFile(file.path, options.knownTerms)
+      : transcribeAudioFile(file.path, {
+          onSegmentCompleted: async ({
+            segmentNumber,
+            totalSegments,
+            combinedText,
+          }) => {
+            await db
+              .update(transcriptionsTable)
+              .set({ text: combinedText })
+              .where(eq(transcriptionsTable.id, recordId));
+            logger.info(
+              { id: recordId, segmentNumber, totalSegments },
+              "Published completed transcription interval",
+            );
+          },
+        });
 
   try {
     const [storageResult, transcriptionResult] = await Promise.allSettled([
@@ -196,6 +242,34 @@ async function processDiskAudio(recordId: number, file: DiskAudioUpload): Promis
     }
 
     if (transcriptionResult.status === "fulfilled") {
+      if (options.processingMode === "verified") {
+        const result = transcriptionResult.value;
+        if (typeof result === "string") {
+          throw new Error("Verified transcription returned an invalid result.");
+        }
+        const errorMessage = result.passed
+          ? null
+          : `Verification failed: word-count variance ${result.variancePercent.toFixed(2)}% exceeds 1.0%.`;
+        await db
+          .update(transcriptionsTable)
+          .set({
+            text: result.passed ? result.selectedText : "",
+            status: result.passed ? "completed" : "failed",
+            errorMessage,
+            audioPath,
+            verificationStatus: result.passed ? "passed" : "failed",
+            verificationRunA: result.runA,
+            verificationRunB: result.runB,
+            verificationWordCountA: result.wordCountA,
+            verificationWordCountB: result.wordCountB,
+            verificationVarianceBps: result.varianceBps,
+          })
+          .where(eq(transcriptionsTable.id, recordId));
+        return;
+      }
+      if (typeof transcriptionResult.value !== "string") {
+        throw new Error("Segmented transcription returned an invalid result.");
+      }
       await db
         .update(transcriptionsTable)
         .set({
@@ -216,7 +290,14 @@ async function processDiskAudio(recordId: number, file: DiskAudioUpload): Promis
           : "Unknown error";
       await db
         .update(transcriptionsTable)
-        .set({ status: "failed", errorMessage, audioPath })
+        .set({
+          status: "failed",
+          errorMessage,
+          audioPath,
+          ...(options.processingMode === "verified"
+            ? { verificationStatus: "failed" }
+            : {}),
+        })
         .where(eq(transcriptionsTable.id, recordId));
     }
   } finally {
@@ -224,20 +305,55 @@ async function processDiskAudio(recordId: number, file: DiskAudioUpload): Promis
   }
 }
 
-async function createTranscriptionFromDisk(file: DiskAudioUpload) {
+async function createTranscriptionFromDisk(
+  file: DiskAudioUpload,
+  options: AudioProcessingOptions,
+) {
   try {
-    const [record] = await db
-      .insert(transcriptionsTable)
-      .values({
-        filename: file.originalname,
-        fileSize: file.size,
-        status: "processing",
-        text: "",
-        audioPath: null,
-      })
-      .returning();
+    const record = await db.transaction(async (tx) => {
+      let batchPosition: number | null = null;
+      if (options.processingMode === "verified" && options.batchId) {
+        await tx.execute(
+          sql`select pg_advisory_xact_lock(hashtext(${options.batchId}))`,
+        );
+        const [batchState] = await tx
+          .select({
+            processingCount: sql<number>`count(*) filter (
+              where ${transcriptionsTable.processingMode} = 'verified'
+                and ${transcriptionsTable.status} = 'processing'
+            )`,
+            maximumPosition: sql<number>`coalesce(max(${transcriptionsTable.batchPosition}), 0)`,
+          })
+          .from(transcriptionsTable)
+          .where(eq(transcriptionsTable.batchId, options.batchId));
+        if (Number(batchState?.processingCount ?? 0) > 0) {
+          throw new Error(
+            "A verified recording is already processing in this batch.",
+          );
+        }
+        batchPosition = Number(batchState?.maximumPosition ?? 0) + 1;
+      }
 
-    void processDiskAudio(record.id, file).catch((err) => {
+      const [created] = await tx
+        .insert(transcriptionsTable)
+        .values({
+          filename: file.originalname,
+          fileSize: file.size,
+          status: "processing",
+          text: "",
+          audioPath: null,
+          processingMode: options.processingMode,
+          verificationStatus:
+            options.processingMode === "verified" ? "pending" : null,
+          knownTerms: options.knownTerms,
+          batchId: options.batchId,
+          batchPosition,
+        })
+        .returning();
+      return created;
+    });
+
+    void processDiskAudio(record.id, file, options).catch((err) => {
       logger.error({ err, id: record.id }, "Background transcription processing failed");
     });
     return record;
@@ -264,8 +380,15 @@ router.post("/transcriptions", uploadSingleAudio, async (req, res): Promise<void
     return;
   }
 
-  const record = await createTranscriptionFromDisk(file);
-  res.status(201).json(GetTranscriptionResponse.parse(record));
+  try {
+    const options = readAudioProcessingOptions(req.body);
+    const record = await createTranscriptionFromDisk(file, options);
+    res.status(201).json(GetTranscriptionResponse.parse(record));
+  } catch (err) {
+    await unlink(file.path).catch(() => {});
+    const message = err instanceof Error ? err.message : "Invalid upload options.";
+    res.status(message.includes("already processing") ? 409 : 400).json({ error: message });
+  }
 });
 
 router.post("/transcriptions/upload-sessions", async (req, res): Promise<void> => {
@@ -276,6 +399,15 @@ router.post("/transcriptions/upload-sessions", async (req, res): Promise<void> =
       ? req.body.mimetype.trim()
       : "application/octet-stream";
   const totalSize = Number(req.body?.fileSize);
+  let options: AudioProcessingOptions;
+  try {
+    options = readAudioProcessingOptions(req.body);
+  } catch (err) {
+    res.status(400).json({
+      error: err instanceof Error ? err.message : "Invalid upload options.",
+    });
+    return;
+  }
 
   if (!filename || !Number.isInteger(totalSize) || totalSize <= 0) {
     res.status(400).json({ error: "Filename and a positive file size are required." });
@@ -303,9 +435,54 @@ router.post("/transcriptions/upload-sessions", async (req, res): Promise<void> =
     receivedBytes: 0,
     nextChunkIndex: 0,
     updatedAt: Date.now(),
+    ...options,
   };
-  await writeFile(session.path, "");
   uploadSessions.set(id, session);
+  try {
+    if (
+      options.processingMode === "verified" &&
+      options.batchId &&
+      [...uploadSessions.values()].some(
+        (activeSession) =>
+          activeSession.id !== id &&
+          activeSession.processingMode === "verified" &&
+          activeSession.batchId === options.batchId,
+      )
+    ) {
+      uploadSessions.delete(id);
+      res.status(409).json({
+        error: "A verified recording is already uploading in this batch.",
+      });
+      return;
+    }
+
+    if (options.processingMode === "verified" && options.batchId) {
+      const [activeRecord] = await db
+        .select({ id: transcriptionsTable.id })
+        .from(transcriptionsTable)
+        .where(
+          and(
+            eq(transcriptionsTable.processingMode, "verified"),
+            eq(transcriptionsTable.batchId, options.batchId),
+            eq(transcriptionsTable.status, "processing"),
+          ),
+        )
+        .limit(1);
+      if (activeRecord) {
+        uploadSessions.delete(id);
+        res.status(409).json({
+          error: "A verified recording is already processing in this batch.",
+        });
+        return;
+      }
+    }
+
+    await writeFile(session.path, "");
+  } catch (err) {
+    uploadSessions.delete(id);
+    await unlink(session.path).catch(() => {});
+    throw err;
+  }
 
   res.status(201).json({
     id,
@@ -401,14 +578,79 @@ router.post(
       return;
     }
 
-    uploadSessions.delete(session.id);
-    const record = await createTranscriptionFromDisk({
-      path: session.path,
-      originalname: session.filename,
-      size: session.totalSize,
-      mimetype: session.mimetype,
-    });
-    res.status(201).json(GetTranscriptionResponse.parse(record));
+    try {
+      const record = await createTranscriptionFromDisk(
+        {
+          path: session.path,
+          originalname: session.filename,
+          size: session.totalSize,
+          mimetype: session.mimetype,
+        },
+        {
+          processingMode: session.processingMode ?? "segmented",
+          knownTerms: session.knownTerms ?? null,
+          batchId: session.batchId ?? null,
+        },
+      );
+      res.status(201).json(GetTranscriptionResponse.parse(record));
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Upload could not be completed.";
+      res.status(message.includes("already processing") ? 409 : 400).json({ error: message });
+    } finally {
+      uploadSessions.delete(session.id);
+    }
+  },
+);
+
+router.get(
+  "/transcription-batches/:batchId/combined",
+  async (req, res): Promise<void> => {
+    const params = GetCombinedTranscriptParams.safeParse(req.params);
+    if (!params.success) {
+      res.status(400).json({ error: params.error.message });
+      return;
+    }
+    const recordings = await db
+      .select()
+      .from(transcriptionsTable)
+      .where(
+        and(
+          eq(transcriptionsTable.batchId, params.data.batchId),
+          eq(transcriptionsTable.processingMode, "verified"),
+          eq(transcriptionsTable.status, "completed"),
+          eq(transcriptionsTable.verificationStatus, "passed"),
+        ),
+      )
+      .orderBy(asc(transcriptionsTable.batchPosition));
+    if (recordings.length === 0) {
+      res.status(404).json({
+        error: "No completed, passed verified recordings exist in this batch.",
+      });
+      return;
+    }
+    const text = recordings
+      .map(
+        (recording, index) =>
+          `=== RECORDING ${index + 1}: ${recording.filename} ===\n${recording.text}`,
+      )
+      .join("\n\n");
+    const totalWordCount = recordings.reduce(
+      (total, recording) =>
+        total +
+        Math.max(
+          recording.verificationWordCountA ?? 0,
+          recording.verificationWordCountB ?? 0,
+        ),
+      0,
+    );
+    res.json(
+      GetCombinedTranscriptResponse.parse({
+        filename: `${params.data.batchId}-combined.txt`,
+        text,
+        recordingCount: recordings.length,
+        totalWordCount,
+      }),
+    );
   },
 );
 

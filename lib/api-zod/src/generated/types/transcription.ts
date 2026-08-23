@@ -5,7 +5,9 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { TranscriptionProcessingMode } from "./transcriptionProcessingMode";
 import type { TranscriptionStatus } from "./transcriptionStatus";
+import type { TranscriptionVerificationStatus } from "./transcriptionVerificationStatus";
 
 export interface Transcription {
   id: number;
@@ -20,5 +22,27 @@ export interface Transcription {
    * @nullable
    */
   audioPath: string | null;
+  processingMode: TranscriptionProcessingMode;
+  /** @nullable */
+  verificationStatus: TranscriptionVerificationStatus;
+  /** @nullable */
+  verificationRunA: string | null;
+  /** @nullable */
+  verificationRunB: string | null;
+  /** @nullable */
+  verificationWordCountA: number | null;
+  /** @nullable */
+  verificationWordCountB: number | null;
+  /**
+   * Word-count variance in basis points; 100 bps equals 1%.
+   * @nullable
+   */
+  verificationVarianceBps: number | null;
+  /** @nullable */
+  knownTerms: string | null;
+  /** @nullable */
+  batchId: string | null;
+  /** @nullable */
+  batchPosition: number | null;
   createdAt: Date;
 }

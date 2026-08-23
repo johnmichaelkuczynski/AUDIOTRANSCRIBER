@@ -10,7 +10,21 @@ import {
   resetTranscriberPage,
 } from "@/lib/resetPage";
 
-export function UploadArea() {
+interface UploadAreaProps {
+  verifiedMode?: boolean;
+  batchId?: string;
+  knownTerms?: string;
+  isVerifiedBusy?: boolean;
+  onVerifiedBusyChange?: (isBusy: boolean) => void;
+}
+
+export function UploadArea({
+  verifiedMode,
+  batchId,
+  knownTerms,
+  isVerifiedBusy,
+  onVerifiedBusyChange,
+}: UploadAreaProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const uploadAbortRef = useRef<AbortController | null>(null);
@@ -31,7 +45,7 @@ export function UploadArea() {
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(false);
-    
+
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
       handleFiles(e.dataTransfer.files);
     }
@@ -65,6 +79,7 @@ export function UploadArea() {
       return;
     }
 
+    if (verifiedMode) onVerifiedBusyChange?.(true);
     setUploadProgress(0);
     const abortController = new AbortController();
     uploadAbortRef.current = abortController;
@@ -73,13 +88,22 @@ export function UploadArea() {
         file,
         setUploadProgress,
         abortController.signal,
+        verifiedMode ? { processingMode: "verified", batchId, knownTerms } : undefined
       );
       toast({
         title: "Transcription started",
-        description: "Two-minute intervals will appear below as each one finishes.",
+        description: verifiedMode
+          ? "Two continuous full-recording runs are now being compared."
+          : "Two-minute intervals will appear below as each one finishes.",
       });
-      queryClient.invalidateQueries({ queryKey: getListTranscriptionsQueryKey() });
-      queryClient.invalidateQueries({ queryKey: getGetTranscriptionStatsQueryKey() });
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: getListTranscriptionsQueryKey(),
+        }),
+        queryClient.invalidateQueries({
+          queryKey: getGetTranscriptionStatsQueryKey(),
+        }),
+      ]);
     } catch (err) {
       if (err instanceof DOMException && err.name === "AbortError") {
         toast({
@@ -97,6 +121,7 @@ export function UploadArea() {
         variant: "destructive",
       });
     } finally {
+      if (verifiedMode) onVerifiedBusyChange?.(false);
       uploadAbortRef.current = null;
       setUploadProgress(null);
       const input = document.getElementById("file-upload") as HTMLInputElement | null;
@@ -109,9 +134,10 @@ export function UploadArea() {
     uploadAbortRef.current = null;
     setUploadProgress(null);
     setIsDragging(false);
+    if (verifiedMode) onVerifiedBusyChange?.(false);
     const input = document.getElementById("file-upload") as HTMLInputElement | null;
     if (input) input.value = "";
-  }, []);
+  }, [onVerifiedBusyChange, verifiedMode]);
 
   useEffect(() => {
     window.addEventListener(CLEAR_CURRENT_UPLOAD_EVENT, clearCurrentUpload);
@@ -128,19 +154,21 @@ export function UploadArea() {
     resetTranscriberPage();
   };
 
+  const isDisabled = isUploading || isVerifiedBusy;
+
   return (
     <div
       className={cn(
         "relative group flex flex-col items-center justify-center w-full h-64 p-8 border-2 border-dashed rounded-xl transition-all duration-300 ease-in-out cursor-pointer overflow-hidden",
-        isDragging 
-          ? "border-primary bg-primary/5 scale-[1.02]" 
+        isDragging && !isDisabled
+          ? "border-primary bg-primary/5 scale-[1.02]"
           : "border-border bg-card hover:border-primary/50 hover:bg-card/80",
-        isUploading && "pointer-events-none opacity-80"
+        isDisabled && "pointer-events-none opacity-80"
       )}
-      onDragOver={handleDragOver}
-      onDragLeave={handleDragLeave}
-      onDrop={handleDrop}
-      onClick={() => !isUploading && document.getElementById("file-upload")?.click()}
+      onDragOver={(e) => !isDisabled && handleDragOver(e)}
+      onDragLeave={(e) => !isDisabled && handleDragLeave(e)}
+      onDrop={(e) => !isDisabled && handleDrop(e)}
+      onClick={() => !isDisabled && document.getElementById("file-upload")?.click()}
     >
       <input
         id="file-upload"
@@ -148,10 +176,20 @@ export function UploadArea() {
         accept="audio/*,.mp3,.wav,.m4a,.ogg"
         className="hidden"
         onChange={handleFileInput}
-        disabled={isUploading}
+        disabled={isDisabled}
       />
       
-      {isUploading ? (
+      {isVerifiedBusy ? (
+        <div className="flex flex-col items-center animate-in fade-in zoom-in duration-300 text-center px-4">
+          <Loader2 className="w-10 h-10 text-primary animate-spin mb-4" />
+          <p className="text-lg font-semibold text-foreground mb-1">
+            Processing verified recording...
+          </p>
+          <p className="text-sm text-muted-foreground max-w-sm">
+            The current verified recording must finish processing before you can upload another one. Normal segmented mode remains available if you disable Verified Legal Transcript.
+          </p>
+        </div>
+      ) : isUploading ? (
         <div className="flex flex-col items-center animate-in fade-in zoom-in duration-300">
           <Loader2 className="w-12 h-12 text-primary animate-spin mb-4" />
           <p className="text-lg font-medium text-foreground">

@@ -67,6 +67,11 @@ export async function uploadAudioFileInChunks(
   file: File,
   onProgress?: (percent: number) => void,
   signal?: AbortSignal,
+  options?: {
+    processingMode?: "segmented" | "verified";
+    knownTerms?: string;
+    batchId?: string;
+  }
 ): Promise<Transcription> {
   const initResponse = await fetch("/api/transcriptions/upload-sessions", {
     method: "POST",
@@ -75,6 +80,9 @@ export async function uploadAudioFileInChunks(
       filename: file.name,
       fileSize: file.size,
       mimetype: file.type || "application/octet-stream",
+      processingMode: options?.processingMode,
+      knownTerms: options?.knownTerms,
+      batchId: options?.batchId,
     }),
     signal,
   });

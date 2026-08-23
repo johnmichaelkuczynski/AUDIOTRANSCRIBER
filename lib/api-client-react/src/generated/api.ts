@@ -17,9 +17,10 @@ import type {
 } from "@tanstack/react-query";
 
 import type {
+  AudioTranscriptionInput,
   CoherenceJob,
   CoherenceJobInput,
-  CreateTranscriptionBody,
+  CombinedTranscript,
   DiagnosticReport,
   ErrorResponse,
   HealthStatus,
@@ -200,11 +201,20 @@ export const getCreateTranscriptionUrl = () => {
 };
 
 export const createTranscription = async (
-  createTranscriptionBody: CreateTranscriptionBody,
+  audioTranscriptionInput: AudioTranscriptionInput,
   options?: RequestInit,
 ): Promise<Transcription> => {
   const formData = new FormData();
-  formData.append(`file`, createTranscriptionBody.file);
+  formData.append(`file`, audioTranscriptionInput.file);
+  if (audioTranscriptionInput.processingMode !== undefined) {
+    formData.append(`processingMode`, audioTranscriptionInput.processingMode);
+  }
+  if (audioTranscriptionInput.knownTerms !== undefined) {
+    formData.append(`knownTerms`, audioTranscriptionInput.knownTerms);
+  }
+  if (audioTranscriptionInput.batchId !== undefined) {
+    formData.append(`batchId`, audioTranscriptionInput.batchId);
+  }
 
   return customFetch<Transcription>(getCreateTranscriptionUrl(), {
     ...options,
@@ -220,14 +230,14 @@ export const getCreateTranscriptionMutationOptions = <
   mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof createTranscription>>,
     TError,
-    { data: BodyType<CreateTranscriptionBody> },
+    { data: BodyType<AudioTranscriptionInput> },
     TContext
   >;
   request?: SecondParameter<typeof customFetch>;
 }): UseMutationOptions<
   Awaited<ReturnType<typeof createTranscription>>,
   TError,
-  { data: BodyType<CreateTranscriptionBody> },
+  { data: BodyType<AudioTranscriptionInput> },
   TContext
 > => {
   const mutationKey = ["createTranscription"];
@@ -241,7 +251,7 @@ export const getCreateTranscriptionMutationOptions = <
 
   const mutationFn: MutationFunction<
     Awaited<ReturnType<typeof createTranscription>>,
-    { data: BodyType<CreateTranscriptionBody> }
+    { data: BodyType<AudioTranscriptionInput> }
   > = (props) => {
     const { data } = props ?? {};
 
@@ -254,7 +264,7 @@ export const getCreateTranscriptionMutationOptions = <
 export type CreateTranscriptionMutationResult = NonNullable<
   Awaited<ReturnType<typeof createTranscription>>
 >;
-export type CreateTranscriptionMutationBody = BodyType<CreateTranscriptionBody>;
+export type CreateTranscriptionMutationBody = BodyType<AudioTranscriptionInput>;
 export type CreateTranscriptionMutationError = ErrorType<ErrorResponse>;
 
 /**
@@ -267,18 +277,107 @@ export const useCreateTranscription = <
   mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof createTranscription>>,
     TError,
-    { data: BodyType<CreateTranscriptionBody> },
+    { data: BodyType<AudioTranscriptionInput> },
     TContext
   >;
   request?: SecondParameter<typeof customFetch>;
 }): UseMutationResult<
   Awaited<ReturnType<typeof createTranscription>>,
   TError,
-  { data: BodyType<CreateTranscriptionBody> },
+  { data: BodyType<AudioTranscriptionInput> },
   TContext
 > => {
   return useMutation(getCreateTranscriptionMutationOptions(options));
 };
+
+/**
+ * @summary Combine passed verified recordings in a batch
+ */
+export const getGetCombinedTranscriptUrl = (batchId: string) => {
+  return `/api/transcription-batches/${batchId}/combined`;
+};
+
+export const getCombinedTranscript = async (
+  batchId: string,
+  options?: RequestInit,
+): Promise<CombinedTranscript> => {
+  return customFetch<CombinedTranscript>(getGetCombinedTranscriptUrl(batchId), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetCombinedTranscriptQueryKey = (batchId: string) => {
+  return [`/api/transcription-batches/${batchId}/combined`] as const;
+};
+
+export const getGetCombinedTranscriptQueryOptions = <
+  TData = Awaited<ReturnType<typeof getCombinedTranscript>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  batchId: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getCombinedTranscript>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetCombinedTranscriptQueryKey(batchId);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getCombinedTranscript>>
+  > = ({ signal }) =>
+    getCombinedTranscript(batchId, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!batchId,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getCombinedTranscript>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetCombinedTranscriptQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getCombinedTranscript>>
+>;
+export type GetCombinedTranscriptQueryError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Combine passed verified recordings in a batch
+ */
+
+export function useGetCombinedTranscript<
+  TData = Awaited<ReturnType<typeof getCombinedTranscript>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  batchId: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getCombinedTranscript>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetCombinedTranscriptQueryOptions(batchId, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
 
 /**
  * @summary Import a completed transcript without audio

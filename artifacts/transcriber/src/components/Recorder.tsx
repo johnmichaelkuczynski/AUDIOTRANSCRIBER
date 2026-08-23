@@ -46,7 +46,21 @@ function formatDuration(seconds: number): string {
   return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
-export function Recorder() {
+interface RecorderProps {
+  verifiedMode?: boolean;
+  batchId?: string;
+  knownTerms?: string;
+  isVerifiedBusy?: boolean;
+  onVerifiedBusyChange?: (isBusy: boolean) => void;
+}
+
+export function Recorder({
+  verifiedMode,
+  batchId,
+  knownTerms,
+  isVerifiedBusy,
+  onVerifiedBusyChange,
+}: RecorderProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -98,7 +112,8 @@ export function Recorder() {
     setElapsed(0);
     recordedBlobRef.current = null;
     setAudioUrlTracked(null);
-  }, [setAudioUrlTracked]);
+    if (verifiedMode) onVerifiedBusyChange?.(false);
+  }, [onVerifiedBusyChange, setAudioUrlTracked, verifiedMode]);
 
   useEffect(() => {
     disposedRef.current = false;
@@ -135,6 +150,7 @@ export function Recorder() {
       const ext = extForMime(mimeRef.current || blob.type);
       const filename = `recording-${new Date().toISOString().replace(/[:.]/g, "-")}.${ext}`;
       const file = new File([blob], filename, { type: blob.type || mimeRef.current });
+      if (verifiedMode) onVerifiedBusyChange?.(true);
       setUploadProgress(0);
       const abortController = new AbortController();
       uploadAbortRef.current = abortController;
@@ -143,13 +159,22 @@ export function Recorder() {
           file,
           setUploadProgress,
           abortController.signal,
+          verifiedMode ? { processingMode: "verified", batchId, knownTerms } : undefined
         );
         toast({
           title: "Transcription started",
-          description: "Two-minute intervals will appear below as each one finishes.",
+          description: verifiedMode
+            ? "Two continuous full-recording runs are now being compared."
+            : "Two-minute intervals will appear below as each one finishes.",
         });
-        queryClient.invalidateQueries({ queryKey: getListTranscriptionsQueryKey() });
-        queryClient.invalidateQueries({ queryKey: getGetTranscriptionStatsQueryKey() });
+        await Promise.all([
+          queryClient.invalidateQueries({
+            queryKey: getListTranscriptionsQueryKey(),
+          }),
+          queryClient.invalidateQueries({
+            queryKey: getGetTranscriptionStatsQueryKey(),
+          }),
+        ]);
         resetRecording();
       } catch (err) {
         if (err instanceof DOMException && err.name === "AbortError") {
@@ -169,11 +194,20 @@ export function Recorder() {
           variant: "destructive",
         });
       } finally {
+        if (verifiedMode) onVerifiedBusyChange?.(false);
         uploadAbortRef.current = null;
         setUploadProgress(null);
       }
     },
-    [queryClient, resetRecording, toast],
+    [
+      batchId,
+      knownTerms,
+      onVerifiedBusyChange,
+      queryClient,
+      resetRecording,
+      toast,
+      verifiedMode,
+    ],
   );
 
   const finalizeRecording = useCallback(() => {
@@ -195,6 +229,7 @@ export function Recorder() {
     recordedBlobRef.current = blob;
 
     if (blob.size === 0) {
+      if (verifiedMode) onVerifiedBusyChange?.(false);
       setState("idle");
       setElapsed(0);
       toast({
@@ -211,10 +246,19 @@ export function Recorder() {
       setElapsed(0);
       transcribeBlob(blob);
     } else {
+      if (verifiedMode) onVerifiedBusyChange?.(false);
       setAudioUrlTracked(URL.createObjectURL(blob));
       setState("recorded");
     }
-  }, [stopTimer, releaseStream, transcribeBlob, setAudioUrlTracked, toast]);
+  }, [
+    onVerifiedBusyChange,
+    releaseStream,
+    setAudioUrlTracked,
+    stopTimer,
+    toast,
+    transcribeBlob,
+    verifiedMode,
+  ]);
 
   const startRecording = useCallback(async () => {
     if (!navigator.mediaDevices?.getUserMedia) {
@@ -229,6 +273,7 @@ export function Recorder() {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
+      if (verifiedMode) onVerifiedBusyChange?.(true);
 
       const mime = pickMimeType();
       mimeRef.current = mime;
@@ -266,7 +311,7 @@ export function Recorder() {
         variant: "destructive",
       });
     }
-  }, [toast, finalizeRecording]);
+  }, [finalizeRecording, onVerifiedBusyChange, releaseStream, toast, verifiedMode]);
 
   const stopRecording = useCallback(() => {
     stopTimer();
@@ -358,7 +403,17 @@ export function Recorder() {
         )}
       </div>
 
-      {isUploading ? (
+      {isVerifiedBusy ? (
+        <div className="flex flex-col items-center justify-center py-8 text-center px-4">
+          <Loader2 className="w-10 h-10 text-primary animate-spin mb-4" />
+          <p className="text-lg font-semibold text-foreground mb-1">
+            Processing verified recording...
+          </p>
+          <p className="text-sm text-muted-foreground max-w-sm">
+            The current verified recording must finish processing before you can record another one.
+          </p>
+        </div>
+      ) : isUploading ? (
         <div className="flex flex-col items-center justify-center py-8">
           <Loader2 className="w-10 h-10 text-primary animate-spin mb-3" />
           <p className="font-medium text-foreground">Uploading {uploadProgress}%</p>

@@ -5,6 +5,27 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+export type AudioTranscriptionInputProcessingMode =
+  (typeof AudioTranscriptionInputProcessingMode)[keyof typeof AudioTranscriptionInputProcessingMode];
+
+export const AudioTranscriptionInputProcessingMode = {
+  segmented: "segmented",
+  verified: "verified",
+} as const;
+
+export interface AudioTranscriptionInput {
+  /** The audio file to transcribe (MP3, WAV, etc.) */
+  file: Blob;
+  processingMode?: AudioTranscriptionInputProcessingMode;
+  /** Newline-delimited key terms and optional "heard wrong => confirmed spelling" corrections. */
+  knownTerms?: string;
+  /**
+   * Required when processingMode is verified. Groups recordings into one sequential verified session.
+   * @minLength 1
+   */
+  batchId?: string;
+}
+
 export interface TranscriptTextInput {
   /** @minLength 1 */
   text: string;
@@ -137,6 +158,27 @@ export const TranscriptionStatus = {
   failed: "failed",
 } as const;
 
+export type TranscriptionProcessingMode =
+  (typeof TranscriptionProcessingMode)[keyof typeof TranscriptionProcessingMode];
+
+export const TranscriptionProcessingMode = {
+  segmented: "segmented",
+  verified: "verified",
+} as const;
+
+/**
+ * @nullable
+ */
+export type TranscriptionVerificationStatus =
+  | (typeof TranscriptionVerificationStatus)[keyof typeof TranscriptionVerificationStatus]
+  | null;
+
+export const TranscriptionVerificationStatus = {
+  pending: "pending",
+  passed: "passed",
+  failed: "failed",
+} as const;
+
 export interface Transcription {
   id: number;
   filename: string;
@@ -150,7 +192,36 @@ export interface Transcription {
    * @nullable
    */
   audioPath: string | null;
+  processingMode: TranscriptionProcessingMode;
+  /** @nullable */
+  verificationStatus: TranscriptionVerificationStatus;
+  /** @nullable */
+  verificationRunA: string | null;
+  /** @nullable */
+  verificationRunB: string | null;
+  /** @nullable */
+  verificationWordCountA: number | null;
+  /** @nullable */
+  verificationWordCountB: number | null;
+  /**
+   * Word-count variance in basis points; 100 bps equals 1%.
+   * @nullable
+   */
+  verificationVarianceBps: number | null;
+  /** @nullable */
+  knownTerms: string | null;
+  /** @nullable */
+  batchId: string | null;
+  /** @nullable */
+  batchPosition: number | null;
   createdAt: string;
+}
+
+export interface CombinedTranscript {
+  filename: string;
+  text: string;
+  recordingCount: number;
+  totalWordCount: number;
 }
 
 export interface TranscriptionStats {
@@ -213,8 +284,3 @@ export interface TransformResponse {
 export interface ErrorResponse {
   error: string;
 }
-
-export type CreateTranscriptionBody = {
-  /** The audio file to transcribe (MP3, WAV, etc.) */
-  file: Blob;
-};

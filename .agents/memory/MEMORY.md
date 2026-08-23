@@ -6,3 +6,4 @@
 - [Direct transcription credentials](direct-transcription-credentials.md) — transcription must use the direct OpenAI API key; do not reintroduce Replit AI Integrations.
 - [Neon and speaker diarization](neon-speaker-diarization.md) — prefer NEON_DATABASE_API and require true AssemblyAI utterance-level speaker labels for transcription.
 - [Legal transcript polish quality](legal-transcript-polish-quality.md) — use a dedicated global name ledger, context-aware cleanup, audio evidence for ambiguity, and a hard final quality gate.
+- [Verified upload serialization](verified-upload-serialization.md) — reserve verified batches before chunk transfer; a processing-row lock alone is too late to prevent overlapping uploads.

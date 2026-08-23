@@ -79,6 +79,7 @@ async function uploadAudio(inputPath: string, apiKey: string): Promise<string> {
 async function createTranscript(
   audioUrl: string,
   apiKey: string,
+  keytermsPrompt?: string[],
 ): Promise<string> {
   const response = await fetch(`${ASSEMBLYAI_BASE_URL}/v2/transcript`, {
     method: "POST",
@@ -92,6 +93,7 @@ async function createTranscript(
       speech_models: ["universal-3-5-pro", "universal-2"],
       format_text: true,
       punctuate: true,
+      ...(keytermsPrompt?.length ? { keyterms_prompt: keytermsPrompt } : {}),
     }),
     signal: AbortSignal.timeout(60_000),
   });
@@ -104,6 +106,56 @@ async function createTranscript(
     throw new Error("AssemblyAI did not return a transcript ID");
   }
   return body.id;
+}
+
+export type KnownTermsSpecification = {
+  keyterms: string[];
+  replacements: Array<{ heard: string; confirmed: string }>;
+};
+
+export function parseKnownTermsSpecifications(
+  specifications?: string | null,
+): KnownTermsSpecification {
+  const keyterms: string[] = [];
+  const replacements: KnownTermsSpecification["replacements"] = [];
+  for (const rawLine of specifications?.split(/\r?\n/) ?? []) {
+    const line = rawLine.trim();
+    if (!line) continue;
+    const separator = line.indexOf("=>");
+    if (separator < 0) {
+      keyterms.push(line);
+      continue;
+    }
+    const heard = line.slice(0, separator).trim();
+    const confirmed = line.slice(separator + 2).trim();
+    if (!heard || !confirmed) continue;
+    keyterms.push(heard, confirmed);
+    replacements.push({ heard, confirmed });
+  }
+  return { keyterms: [...new Set(keyterms)], replacements };
+}
+
+export function countSpokenWords(text: string): number {
+  return text.match(/[\p{L}\p{N}]+(?:['’.-][\p{L}\p{N}]+)*/gu)?.length ?? 0;
+}
+
+export function calculateWordCountVarianceBps(a: number, b: number): number {
+  const minimum = Math.min(a, b);
+  if (minimum === 0) return a === b ? 0 : 1_000_000;
+  return Math.ceil((Math.abs(a - b) / minimum) * 10_000);
+}
+
+export function applyKnownTermReplacements(
+  text: string,
+  replacements: KnownTermsSpecification["replacements"],
+): string {
+  return replacements.reduce((result, replacement) => {
+    const escaped = replacement.heard.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    return result.replace(
+      new RegExp(`(?<![\\p{L}\\p{N}])${escaped}(?![\\p{L}\\p{N}])`, "giu"),
+      replacement.confirmed,
+    );
+  }, text);
 }
 
 async function pollTranscript(
@@ -172,6 +224,69 @@ async function transcribeSingleAudioFile(
   const transcriptId = await createTranscript(audioUrl, apiKey);
   const transcript = await pollTranscript(transcriptId, apiKey);
   return formatSpeakerTranscript(transcript, offsetMilliseconds);
+}
+
+export type VerifiedTranscriptionResult = {
+  runA: string;
+  runB: string;
+  wordCountA: number;
+  wordCountB: number;
+  varianceBps: number;
+  variancePercent: number;
+  passed: boolean;
+  selectedText: string;
+};
+
+export async function transcribeVerifiedAudioFile(
+  inputPath: string,
+  specifications?: string | null,
+): Promise<VerifiedTranscriptionResult> {
+  const apiKey = getApiKey();
+  const parsedSpecifications = parseKnownTermsSpecifications(specifications);
+  const audioUrl = await uploadAudio(inputPath, apiKey);
+  const [transcriptIdA, transcriptIdB] = await Promise.all([
+    createTranscript(audioUrl, apiKey, parsedSpecifications.keyterms),
+    createTranscript(audioUrl, apiKey, parsedSpecifications.keyterms),
+  ]);
+  const [transcriptA, transcriptB] = await Promise.all([
+    pollTranscript(transcriptIdA, apiKey),
+    pollTranscript(transcriptIdB, apiKey),
+  ]);
+  const runA = formatSpeakerTranscript(transcriptA);
+  const runB = formatSpeakerTranscript(transcriptB);
+  const rawSpokenTextA =
+    transcriptA.text ??
+    transcriptA.utterances?.map((utterance) => utterance.text).join(" ") ??
+    "";
+  const rawSpokenTextB =
+    transcriptB.text ??
+    transcriptB.utterances?.map((utterance) => utterance.text).join(" ") ??
+    "";
+  const wordCountA = countSpokenWords(rawSpokenTextA);
+  const wordCountB = countSpokenWords(rawSpokenTextB);
+  const varianceBps = calculateWordCountVarianceBps(wordCountA, wordCountB);
+  const minimumWordCount = Math.min(wordCountA, wordCountB);
+  const variancePercent =
+    minimumWordCount === 0
+      ? wordCountA === wordCountB
+        ? 0
+        : Number.POSITIVE_INFINITY
+      : (Math.abs(wordCountA - wordCountB) / minimumWordCount) * 100;
+  const selectedRawText = wordCountB > wordCountA ? runB : runA;
+
+  return {
+    runA,
+    runB,
+    wordCountA,
+    wordCountB,
+    varianceBps,
+    variancePercent,
+    passed: variancePercent <= 1,
+    selectedText: applyKnownTermReplacements(
+      selectedRawText,
+      parsedSpecifications.replacements,
+    ),
+  };
 }
 
 async function getAudioDurationSeconds(inputPath: string): Promise<number | null> {
