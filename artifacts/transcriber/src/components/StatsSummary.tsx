@@ -1,11 +1,19 @@
-import { useGetTranscriptionStats } from "@workspace/api-client-react";
+import {
+  getListTranscriptionsQueryKey,
+  useListTranscriptions,
+} from "@workspace/api-client-react";
 import { formatFileSize } from "@/lib/format";
 import { Card } from "@/components/ui/card";
 import { Clock, FileAudio, CheckCircle2 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
+import { wasCreatedAfterWorkspaceClear } from "@/lib/resetPage";
 
 export function StatsSummary() {
-  const { data: stats, isLoading } = useGetTranscriptionStats();
+  const { data: transcriptions, isLoading } = useListTranscriptions({
+    query: {
+      queryKey: getListTranscriptionsQueryKey(),
+    },
+  });
 
   if (isLoading) {
     return (
@@ -17,7 +25,18 @@ export function StatsSummary() {
     );
   }
 
-  if (!stats) return null;
+  if (!transcriptions) return null;
+
+  const currentTranscriptions = transcriptions.filter((transcription) =>
+    wasCreatedAfterWorkspaceClear(transcription.createdAt),
+  );
+  const completedCount = currentTranscriptions.filter(
+    (transcription) => transcription.status === "completed",
+  ).length;
+  const totalFileSize = currentTranscriptions.reduce(
+    (total, transcription) => total + transcription.fileSize,
+    0,
+  );
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
@@ -27,7 +46,9 @@ export function StatsSummary() {
         </div>
         <div>
           <p className="text-sm font-medium text-muted-foreground">Total Files</p>
-          <p className="text-2xl font-bold text-foreground">{stats.totalCount}</p>
+          <p className="text-2xl font-bold text-foreground">
+            {currentTranscriptions.length}
+          </p>
         </div>
       </Card>
       
@@ -37,7 +58,7 @@ export function StatsSummary() {
         </div>
         <div>
           <p className="text-sm font-medium text-muted-foreground">Completed</p>
-          <p className="text-2xl font-bold text-foreground">{stats.completedCount}</p>
+          <p className="text-2xl font-bold text-foreground">{completedCount}</p>
         </div>
       </Card>
       
@@ -47,7 +68,9 @@ export function StatsSummary() {
         </div>
         <div>
           <p className="text-sm font-medium text-muted-foreground">Total Size</p>
-          <p className="text-2xl font-bold text-foreground">{formatFileSize(stats.totalFileSize)}</p>
+          <p className="text-2xl font-bold text-foreground">
+            {formatFileSize(totalFileSize)}
+          </p>
         </div>
       </Card>
     </div>
