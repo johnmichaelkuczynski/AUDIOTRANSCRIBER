@@ -21,3 +21,10 @@ uri = "file://attached_assets/recording-1-transcript.txt"
 type = "text"
 title = "Recording 1 — Timestamped Transcript"
 description = "Complete 34:32 hearing transcript with 18 verified intervals, speaker labels, timestamps, 5,887 words, and confirmed name-spelling corrections."
+
+[[outputs]]
+id = "qk_gX5xR7S5JJcPm_RwYX"
+uri = "file://attached_assets/recording-2-transcript.txt"
+type = "text"
+title = "Recording 2 — Timestamped Transcript"
+description = "Complete 34:32 hearing transcript with 248 timestamped speaker turns, 5,647 words, confirmed name-spelling correction, and 0.388% independent-run variance."
