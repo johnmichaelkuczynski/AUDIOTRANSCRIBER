@@ -4,7 +4,7 @@ import {
   getGetTranscriptionStatsQueryKey,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Mic, Square, Loader2, Trash2, Download, Sparkles } from "lucide-react";
+import { Mic, Square, Loader2, Trash2, Download, Sparkles, X } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
@@ -63,6 +63,7 @@ export function Recorder() {
   const disposedRef = useRef(false);
   const finalizedRef = useRef(false);
   const fallbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const uploadAbortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     autoTranscribeRef.current = autoTranscribe;
@@ -131,8 +132,14 @@ export function Recorder() {
       const filename = `recording-${new Date().toISOString().replace(/[:.]/g, "-")}.${ext}`;
       const file = new File([blob], filename, { type: blob.type || mimeRef.current });
       setUploadProgress(0);
+      const abortController = new AbortController();
+      uploadAbortRef.current = abortController;
       try {
-        await uploadAudioFileInChunks(file, setUploadProgress);
+        await uploadAudioFileInChunks(
+          file,
+          setUploadProgress,
+          abortController.signal,
+        );
         toast({
           title: "Transcription started",
           description: "Two-minute intervals will appear below as each one finishes.",
@@ -141,6 +148,14 @@ export function Recorder() {
         queryClient.invalidateQueries({ queryKey: getGetTranscriptionStatsQueryKey() });
         resetRecording();
       } catch (err) {
+        if (err instanceof DOMException && err.name === "AbortError") {
+          toast({
+            title: "Upload cleared",
+            description: "The recorder is ready to use again.",
+          });
+          resetRecording();
+          return;
+        }
         toast({
           title: "Transcription failed",
           description:
@@ -150,6 +165,7 @@ export function Recorder() {
           variant: "destructive",
         });
       } finally {
+        uploadAbortRef.current = null;
         setUploadProgress(null);
       }
     },
@@ -291,6 +307,23 @@ export function Recorder() {
     transcribeBlob(blob);
   }, [transcribeBlob]);
 
+  const handleClearUpload = useCallback(() => {
+    uploadAbortRef.current?.abort();
+    uploadAbortRef.current = null;
+    setUploadProgress(null);
+    resetRecording();
+  }, [resetRecording]);
+
+  useEffect(() => {
+    window.addEventListener("transcriber:clear-current-upload", handleClearUpload);
+    return () => {
+      window.removeEventListener(
+        "transcriber:clear-current-upload",
+        handleClearUpload,
+      );
+    };
+  }, [handleClearUpload]);
+
   const isUploading = uploadProgress !== null;
 
   return (
@@ -334,6 +367,15 @@ export function Recorder() {
           <p className="text-sm text-muted-foreground mt-2">
             Sent in retryable 8 MB pieces
           </p>
+          <Button
+            type="button"
+            variant="outline"
+            className="mt-4 gap-2"
+            onClick={handleClearUpload}
+          >
+            <X className="w-4 h-4" />
+            Clear
+          </Button>
         </div>
       ) : state === "idle" ? (
         <button

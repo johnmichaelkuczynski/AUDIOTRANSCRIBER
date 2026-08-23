@@ -1,7 +1,7 @@
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useEffect, useRef } from "react";
 import { getListTranscriptionsQueryKey, getGetTranscriptionStatsQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
-import { UploadCloud, FileAudio, Loader2 } from "lucide-react";
+import { UploadCloud, FileAudio, Loader2, X } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { uploadAudioFileInChunks } from "@/lib/chunkedUpload";
@@ -9,6 +9,7 @@ import { uploadAudioFileInChunks } from "@/lib/chunkedUpload";
 export function UploadArea() {
   const [isDragging, setIsDragging] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
+  const uploadAbortRef = useRef<AbortController | null>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const isUploading = uploadProgress !== null;
@@ -61,8 +62,14 @@ export function UploadArea() {
     }
 
     setUploadProgress(0);
+    const abortController = new AbortController();
+    uploadAbortRef.current = abortController;
     try {
-      await uploadAudioFileInChunks(file, setUploadProgress);
+      await uploadAudioFileInChunks(
+        file,
+        setUploadProgress,
+        abortController.signal,
+      );
       toast({
         title: "Transcription started",
         description: "Two-minute intervals will appear below as each one finishes.",
@@ -70,6 +77,13 @@ export function UploadArea() {
       queryClient.invalidateQueries({ queryKey: getListTranscriptionsQueryKey() });
       queryClient.invalidateQueries({ queryKey: getGetTranscriptionStatsQueryKey() });
     } catch (err) {
+      if (err instanceof DOMException && err.name === "AbortError") {
+        toast({
+          title: "Upload cleared",
+          description: "The uploader is ready for another recording.",
+        });
+        return;
+      }
       toast({
         title: "Upload failed",
         description:
@@ -79,10 +93,35 @@ export function UploadArea() {
         variant: "destructive",
       });
     } finally {
+      uploadAbortRef.current = null;
       setUploadProgress(null);
       const input = document.getElementById("file-upload") as HTMLInputElement | null;
       if (input) input.value = "";
     }
+  };
+
+  const clearCurrentUpload = useCallback(() => {
+    uploadAbortRef.current?.abort();
+    uploadAbortRef.current = null;
+    setUploadProgress(null);
+    setIsDragging(false);
+    const input = document.getElementById("file-upload") as HTMLInputElement | null;
+    if (input) input.value = "";
+  }, []);
+
+  useEffect(() => {
+    window.addEventListener("transcriber:clear-current-upload", clearCurrentUpload);
+    return () => {
+      window.removeEventListener(
+        "transcriber:clear-current-upload",
+        clearCurrentUpload,
+      );
+    };
+  }, [clearCurrentUpload]);
+
+  const handleClear = (event: React.MouseEvent) => {
+    event.stopPropagation();
+    clearCurrentUpload();
   };
 
   return (
@@ -123,6 +162,14 @@ export function UploadArea() {
           <p className="text-sm text-muted-foreground mt-2">
             Sent in retryable 8 MB pieces
           </p>
+          <button
+            type="button"
+            onClick={handleClear}
+            className="mt-4 inline-flex items-center gap-2 rounded-md border border-border bg-background px-4 py-2 text-sm font-medium text-foreground hover:bg-muted"
+          >
+            <X className="w-4 h-4" />
+            Clear
+          </button>
         </div>
       ) : (
         <div className="flex flex-col items-center animate-in fade-in zoom-in duration-300">

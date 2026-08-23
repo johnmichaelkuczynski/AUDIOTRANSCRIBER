@@ -6,7 +6,7 @@ import { formatFileSize, formatDate } from "@/lib/format";
 import { Card, CardHeader, CardContent, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Copy, Trash2, FileAudio, AlertCircle, Check, Play, Pause } from "lucide-react";
+import { Loader2, Copy, Trash2, FileAudio, AlertCircle, Check, Play, Pause, Download } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { TransformPanel } from "./TransformPanel";
@@ -63,6 +63,22 @@ export function TranscriptionCard({ transcription }: TranscriptionCardProps) {
     setCopied(true);
     toast({ title: "Copied to clipboard" });
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleDownloadTranscript = () => {
+    if (!transcription.text) return;
+    const baseName = transcription.filename.replace(/\.[^.]+$/, "") || "transcript";
+    const blob = new Blob([transcription.text], {
+      type: "text/plain;charset=utf-8",
+    });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `${baseName}-transcript.txt`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    document.body.removeChild(anchor);
+    URL.revokeObjectURL(url);
   };
 
   const isProcessing = transcription.status === "processing";
@@ -192,8 +208,8 @@ export function TranscriptionCard({ transcription }: TranscriptionCardProps) {
       </CardContent>
       
       <CardFooter className="pt-2 flex justify-between">
-        <div className="flex items-center gap-2">
-          {isCompleted && (
+        <div className="flex flex-wrap items-center gap-2">
+          {transcription.text && (
             <Button 
               variant="ghost" 
               size="sm" 
@@ -204,13 +220,35 @@ export function TranscriptionCard({ transcription }: TranscriptionCardProps) {
               {copied ? "Copied" : "Copy text"}
             </Button>
           )}
+          {transcription.text && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 gap-2"
+              onClick={handleDownloadTranscript}
+            >
+              <Download className="w-4 h-4" />
+              Download transcript
+            </Button>
+          )}
+          {transcription.audioPath && (
+            <Button variant="outline" size="sm" className="h-8 gap-2" asChild>
+              <a
+                href={`/api/transcriptions/${transcription.id}/audio?download=1`}
+                download={transcription.filename}
+              >
+                <Download className="w-4 h-4" />
+                Download recording
+              </a>
+            </Button>
+          )}
         </div>
         
         <AlertDialog>
           <AlertDialogTrigger asChild>
-            <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10">
+            <Button variant="ghost" size="sm" className="h-8 gap-2 px-3 text-muted-foreground hover:text-destructive hover:bg-destructive/10">
               <Trash2 className="w-4 h-4" />
-              <span className="sr-only">Delete</span>
+              <span>Clear</span>
             </Button>
           </AlertDialogTrigger>
           <AlertDialogContent>

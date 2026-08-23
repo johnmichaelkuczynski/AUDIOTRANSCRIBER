@@ -624,6 +624,12 @@ router.get("/transcriptions/:id/audio", async (req, res): Promise<void> => {
     res.setHeader("Content-Type", contentType);
     res.setHeader("Cache-Control", "private, max-age=3600");
     res.setHeader("Accept-Ranges", "bytes");
+    if (req.query.download === "1") {
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename*=UTF-8''${encodeURIComponent(transcription.filename)}`,
+      );
+    }
 
     const range = req.headers.range;
     const rangeMatch = totalSize > 0 && range ? /^bytes=(\d*)-(\d*)$/.exec(range) : null;

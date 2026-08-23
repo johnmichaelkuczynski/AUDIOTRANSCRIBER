@@ -28,9 +28,13 @@ async function uploadChunkWithRetries(
   sessionId: string,
   chunkIndex: number,
   chunk: Blob,
+  signal?: AbortSignal,
 ): Promise<void> {
   let lastError: unknown;
   for (let attempt = 1; attempt <= 5; attempt += 1) {
+    if (signal?.aborted) {
+      throw new DOMException("Upload cleared", "AbortError");
+    }
     try {
       const formData = new FormData();
       formData.append("chunk", chunk, `chunk-${chunkIndex}`);
@@ -39,6 +43,7 @@ async function uploadChunkWithRetries(
         {
           method: "POST",
           body: formData,
+          signal,
         },
       );
       await readResponse<{
@@ -61,6 +66,7 @@ async function uploadChunkWithRetries(
 export async function uploadAudioFileInChunks(
   file: File,
   onProgress?: (percent: number) => void,
+  signal?: AbortSignal,
 ): Promise<Transcription> {
   const initResponse = await fetch("/api/transcriptions/upload-sessions", {
     method: "POST",
@@ -70,6 +76,7 @@ export async function uploadAudioFileInChunks(
       fileSize: file.size,
       mimetype: file.type || "application/octet-stream",
     }),
+    signal,
   });
   const session = await readResponse<UploadSessionResponse>(initResponse);
 
@@ -82,13 +89,14 @@ export async function uploadAudioFileInChunks(
         session.id,
         chunkIndex,
         file.slice(start, end),
+        signal,
       );
       onProgress?.(Math.round((end / file.size) * 100));
     }
 
     const completeResponse = await fetch(
       `/api/transcriptions/upload-sessions/${session.id}/complete`,
-      { method: "POST" },
+      { method: "POST", signal },
     );
     return readResponse<Transcription>(completeResponse);
   } catch (err) {
