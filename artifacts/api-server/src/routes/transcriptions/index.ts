@@ -173,18 +173,10 @@ async function processDiskAudio(
 ): Promise<void> {
   const storageTask = (async (): Promise<string | null> => {
     try {
-      const uploadURL = await objectStorage.getObjectEntityUploadURL();
-      const stream = createReadStream(file.path);
-      const putRes = await fetch(uploadURL, {
-        method: "PUT",
-        body: stream as unknown as RequestInit["body"],
-        headers: { "Content-Type": file.mimetype || "application/octet-stream" },
-        duplex: "half",
-      } as RequestInit & { duplex: "half" });
-      if (!putRes.ok) {
-        throw new Error(`Storage upload failed with status ${putRes.status}`);
-      }
-      return objectStorage.normalizeObjectEntityPath(uploadURL);
+      return await objectStorage.persistFile(
+        file.path,
+        file.mimetype || "application/octet-stream",
+      );
     } catch (err) {
       logger.error({ err, id: recordId }, "Failed to persist audio to object storage");
       return null;

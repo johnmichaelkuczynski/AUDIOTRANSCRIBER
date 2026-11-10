@@ -1,0 +1,23 @@
+.git
+.agents
+.local
+.cache
+.config
+.upm
+.replit
+.replitignore
+replit.md
+**/.replit-artifact
+**/node_modules
+**/dist
+**/*.tsbuildinfo
+**/.env
+**/.env.*
+!**/.env.example
+**/*.pem
+**/*.key
+screenshots
+generated-artifacts
+data
+# No runtime/build asset references exist in this directory; private source audio is not an app asset.
+attached_assets

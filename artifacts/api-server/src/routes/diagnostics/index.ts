@@ -2,7 +2,7 @@ import { Router, type IRouter } from "express";
 import { sql } from "drizzle-orm";
 import { spawn } from "node:child_process";
 import { createReadStream } from "node:fs";
-import { open, stat, unlink } from "node:fs/promises";
+import { open, stat, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { randomUUID } from "node:crypto";
@@ -94,7 +94,6 @@ router.post("/diagnostics/run", async (req, res): Promise<void> => {
         "OPENAI_API_KEY",
         "ASSEMBLYAI_API_KEY",
         "NEON_DATABASE_API or NEON_DATABASE_URL or DATABASE_URL",
-        "PRIVATE_OBJECT_DIR",
       ];
       const present =
         Boolean(process.env.OPENAI_API_KEY) &&
@@ -103,28 +102,19 @@ router.post("/diagnostics/run", async (req, res): Promise<void> => {
           process.env.NEON_DATABASE_API ??
             process.env.NEON_DATABASE_URL ??
             process.env.DATABASE_URL,
-        ) &&
-        Boolean(process.env.PRIVATE_OBJECT_DIR);
+        );
       if (!present) {
         throw new Error(`Missing one or more required settings: ${required.join(", ")}`);
       }
-      const databaseSource = process.env.NEON_DATABASE_API
-        ? "NEON_DATABASE_API"
-        : process.env.NEON_DATABASE_URL
-          ? "NEON_DATABASE_URL"
-          : "DATABASE_URL";
-      return `Required database (${databaseSource}), storage, AssemblyAI diarization, and OpenAI formatting settings are present.`;
+      const databaseSource = process.env.NEON_DATABASE_API ? "NEON_DATABASE_API" : process.env.NEON_DATABASE_URL ? "NEON_DATABASE_URL" : "DATABASE_URL";
+      return `Database (${databaseSource}) and provider settings are present. Persistent storage is tested separately.`;
     }),
   );
 
   checks.push(
     await runCheck("PostgreSQL connection", async () => {
       await db.execute(sql`select 1 as ok`);
-      const source = process.env.NEON_DATABASE_API
-        ? "NEON_DATABASE_API"
-        : process.env.NEON_DATABASE_URL
-          ? "NEON_DATABASE_URL"
-          : "DATABASE_URL";
+      const source = process.env.NEON_DATABASE_API ? "NEON_DATABASE_API" : process.env.NEON_DATABASE_URL ? "NEON_DATABASE_URL" : "DATABASE_URL";
       return `Database round trip completed through ${source}.`;
     }),
   );
@@ -187,18 +177,15 @@ router.post("/diagnostics/run", async (req, res): Promise<void> => {
   );
 
   checks.push(
-    await runCheck("Object storage", async () => {
-      const uploadUrl = await objectStorage.getObjectEntityUploadURL();
-      const upload = await fetch(uploadUrl, {
-        method: "PUT",
-        body: Buffer.from("transcriber-diagnostic"),
-        headers: { "Content-Type": "text/plain" },
-      });
-      if (!upload.ok) {
-        throw new Error(`Storage write returned HTTP ${upload.status}`);
+    await runCheck("Persistent audio storage", async () => {
+      const testPath = join(tmpdir(), `storage-diagnostic-${randomUUID()}`);
+      let objectPath: string;
+      try {
+        await writeFile(testPath, "transcriber-diagnostic");
+        objectPath = await objectStorage.persistFile(testPath, "text/plain");
+      } finally {
+        await unlink(testPath).catch(() => {});
       }
-
-      const objectPath = objectStorage.normalizeObjectEntityPath(uploadUrl);
       const file = await objectStorage.getObjectEntityFile(objectPath);
       try {
         const [metadata] = await file.getMetadata();

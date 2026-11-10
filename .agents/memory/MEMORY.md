@@ -1,4 +1,4 @@
-- [Audio playback via object storage](audio-playback-storage.md) — persist upload audio server-side for replay; object-storage template gotchas + HTTP Range serving.
+- [Audio persistence across hosting migration](audio-playback-storage.md) — Coolify uses a persistent volume; preserve object keys and migrate actual audio separately from PostgreSQL.
 - [Large upload response timing](large-upload-response-timing.md) — respond after temp-file receipt; run object-storage persistence and transcription concurrently to avoid apparent timeouts.
 - [Auth requires per-user data scoping](auth-user-scoping.md) — gating routes behind requireAuth isn't enough; add userId column + WHERE-scope every query or you ship an IDOR.
 - [Deploy crash-loop diagnosis](deploy-crashloop-diagnosis.md) — healthcheck 500 + "port never opened detected=0" = app throws at startup (usually missing AI integration env), not a build/.cjs path mismatch.

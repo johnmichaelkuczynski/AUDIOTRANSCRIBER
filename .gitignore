@@ -47,3 +47,10 @@ Thumbs.db
 # Replit
 .cache/
 .local/
+
+# Runtime recordings, secrets, and generated validation output
+data/
+/generated-artifacts/
+.env
+.env.*
+!.env.example

@@ -7,23 +7,22 @@ An audio transcription web app. Users upload MP3/WAV/M4A/OGG files and get AI-po
 ## Stack
 
 - **Monorepo tool**: pnpm workspaces
-- **Node.js version**: 24
+- **Node.js version**: 22 (production Docker)
 - **Package manager**: pnpm
 - **TypeScript version**: 5.9
 - **API framework**: Express 5
 - **Database**: PostgreSQL + Drizzle ORM
 - **Validation**: Zod (`zod/v4`), `drizzle-zod`
 - **API codegen**: Orval (from OpenAPI spec)
-- **Build**: esbuild (CJS bundle)
+- **Build**: esbuild (ESM bundle)
 - **Frontend**: React + Vite + Tailwind CSS
-- **AI**: OpenAI (via Replit AI Integrations) — `gpt-4o-mini-transcribe` for speech-to-text
-- **File uploads**: Multer (memory storage, 50MB limit)
+- **AI**: Direct AssemblyAI for diarization; direct OpenAI and optional providers for text generation
+- **File uploads**: Multer disk storage, retryable 8 MB chunks, 1 GB audio limit
 
 ## Architecture
 
 - `artifacts/transcriber/` — React frontend (upload UI, transcription list, stats)
 - `artifacts/api-server/` — Express backend with transcription routes
-- `lib/integrations-openai-ai-server/` — OpenAI SDK wrapper for audio transcription
 - `lib/db/` — Drizzle ORM schema (transcriptions table)
 - `lib/api-spec/` — OpenAPI spec (source of truth)
 - `lib/api-client-react/` — Generated React Query hooks
@@ -50,3 +49,7 @@ An audio transcription web app. Users upload MP3/WAV/M4A/OGG files and get AI-po
 - `transcriptions` table: id, filename, file_size, text, status (processing/completed/failed), error_message, created_at
 
 See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and package details.
+
+## External hosting
+
+See `COOLIFY.md` and `ENV_VARS.md` for Docker/ARM64/Traefik deployment. `pnpm start` serves the production frontend and API on port 5000. Audio uses a persistent filesystem volume, not a platform storage sidecar. Existing audio needs a separate export/copy before cutover. No login/session middleware is active.
