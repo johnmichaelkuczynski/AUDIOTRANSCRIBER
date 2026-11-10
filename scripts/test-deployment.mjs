@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
+import { spawn, execFileSync } from "node:child_process";
 import { createRequire } from "node:module";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -8,6 +8,11 @@ import { pathToFileURL } from "node:url";
 
 const require = createRequire(resolve("artifacts/api-server/package.json"));
 const { build } = require("esbuild");
+const dockerfile = await readFile("Dockerfile", "utf8");
+const runtimeCommand = JSON.parse(dockerfile.match(/^CMD (\[.*\])$/m)[1]);
+assert.equal(runtimeCommand[0], "node", "Docker must start Node directly");
+assert.ok(runtimeCommand.includes("artifacts/api-server/dist/index.mjs"));
+const healthcheck = dockerfile.match(/^\s+CMD node -e "(.*)"$/m)[1];
 const databaseUrl =
   process.env.NEON_DATABASE_API ||
   process.env.NEON_DATABASE_URL ||
@@ -66,7 +71,7 @@ try {
     RESUME_JOBS_ON_START: "false",
   };
   // PORT is deliberately absent: validates the required 5000 default.
-  child = spawn("pnpm", ["start"], {
+  child = spawn(runtimeCommand[0], runtimeCommand.slice(1), {
     cwd: process.cwd(),
     env,
     detached: true,
@@ -94,6 +99,7 @@ try {
   const health = await fetch(`${base}/api/healthz`);
   assert.equal(health.status, 200);
   assert.deepEqual(await health.json(), { status: "ok" });
+  execFileSync(process.execPath, ["-e", healthcheck], { env });
   const home = await fetch(base);
   const html = await home.text();
   assert.equal(home.status, 200);
@@ -122,7 +128,7 @@ try {
     "Startup must not log an error",
   );
   console.log(
-    "PASS: pnpm start, default port 5000, missing optional keys, health, built assets, SPA routes, API 404, database read",
+    "PASS: Docker Node command and exact healthcheck, default port 5000, missing optional keys, built assets, SPA routes, API 404, database read",
   );
   console.log("PASS: production startup has no error-level logs");
 } finally {
